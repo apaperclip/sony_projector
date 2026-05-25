@@ -1,16 +1,9 @@
-"""
-Custom types for sony_projector.
-
-This module defines the runtime data structure attached to each config entry.
-Access pattern: entry.runtime_data.client / entry.runtime_data.coordinator
-
-The SonyProjectorConfigEntry type alias is used throughout the integration
-for type-safe access to the config entry's runtime data.
-"""
+"""Custom types for sony_projector."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -19,19 +12,60 @@ if TYPE_CHECKING:
 
     from .api import SonyProjectorApiClient
     from .coordinator import SonyProjectorDataUpdateCoordinator
+    from .discovery import SonyProjectorDiscoveryManager
 
 
 type SonyProjectorConfigEntry = ConfigEntry[SonyProjectorData]
 
 
+@dataclass(slots=True)
+class SonyProjectorIdentity:
+    """Stable projector identity and metadata."""
+
+    unique_id: str
+    model: str | None = None
+    serial: str | None = None
+    mac_address: str | None = None
+    location: str | None = None
+
+
+@dataclass(slots=True)
+class SonyProjectorAdvertisement:
+    """Projector data received from SDAP advertisements."""
+
+    host: str
+    unique_id: str
+    received_at: datetime
+    power_status: int | str | None = None
+    community: str | None = None
+    product_name: str | None = None
+    serial_number: str | None = None
+    location: str | None = None
+
+
+@dataclass(slots=True)
+class SonyProjectorState:
+    """Cached projector state shared with entities."""
+
+    device_available: bool = False
+    operational_available: bool = False
+    power_status: int | str | None = None
+    normalized_power_status: str | None = None
+    logical_power: bool | None = None
+    input: str | None = None
+    lamp_timer: int | str | None = None
+    lamp_timer_supported: bool = True
+    identity: SonyProjectorIdentity | None = None
+    last_advertisement: SonyProjectorAdvertisement | None = None
+    last_update_error: str | None = None
+    source_list: list[str] = field(default_factory=list)
+
+
 @dataclass
 class SonyProjectorData:
-    """Runtime data for sony_projector config entries.
-
-    Stored as entry.runtime_data after successful setup.
-    Provides typed access to the API client and coordinator instances.
-    """
+    """Runtime data for sony_projector config entries."""
 
     client: SonyProjectorApiClient
     coordinator: SonyProjectorDataUpdateCoordinator
     integration: Integration
+    discovery_manager: SonyProjectorDiscoveryManager

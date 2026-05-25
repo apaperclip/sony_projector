@@ -4,13 +4,35 @@ from logging import Logger, getLogger
 
 LOGGER: Logger = getLogger(__package__)
 
-# Integration metadata
 DOMAIN = "sony_projector"
-ATTRIBUTION = "Data provided by http://jsonplaceholder.typicode.com/"
+MANUFACTURER = "Sony"
 
-# Platform parallel updates - applied to all platforms
 PARALLEL_UPDATES = 1
 
-# Default configuration values
-DEFAULT_UPDATE_INTERVAL_HOURS = 1
-DEFAULT_ENABLE_DEBUGGING = False
+CONF_PROTOCOL = "protocol"
+CONF_COMMUNITY = "community"
+CONF_ADCP_PASSWORD = "adcp_password"
+CONF_UNIQUE_ID = "unique_id"
+
+PROTOCOL_ADCP = "adcp"
+PROTOCOL_SDCP = "sdcp"
+PROTOCOLS = (PROTOCOL_SDCP, PROTOCOL_ADCP)
+
+DEFAULT_SDCP_COMMUNITY = "SONY"
+DEFAULT_ADCP_PASSWORD = "Projector"
+
+SDAP_PORT = 53862
+ADVERTISEMENT_TIMEOUT_SECONDS = 90
+ACTIVE_POLL_INTERVAL_SECONDS = 10
+PASSIVE_POLL_INTERVAL_SECONDS = 60
+POWER_CONFIRMATION_INTERVAL_SECONDS = 5
+POWER_CONFIRMATION_TIMEOUT_SECONDS = 120
+
+DEFAULT_INPUT_SOURCES = ("hdmi1", "hdmi2")
+SENSITIVE_CONFIG_KEYS = {
+    CONF_ADCP_PASSWORD,
+    CONF_COMMUNITY,
+    "password",
+    "token",
+    "api_key",
+}

@@ -1,4 +1,4 @@
-"""Sensor platform for Sony Projector."""
+"""Media player platform for Sony Projector."""
 
 from __future__ import annotations
 
@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING
 
 from custom_components.sony_projector.const import PARALLEL_UPDATES as PARALLEL_UPDATES
 
-from .lamp_timer import SonyProjectorLampTimerSensor
-from .power_status import SonyProjectorPowerStatusSensor
+from .projector import SonyProjectorMediaPlayer
 
 if TYPE_CHECKING:
     from custom_components.sony_projector.data import SonyProjectorConfigEntry
@@ -20,10 +19,5 @@ async def async_setup_entry(
     entry: SonyProjectorConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the sensor platform."""
-    async_add_entities(
-        [
-            SonyProjectorPowerStatusSensor(entry.runtime_data.coordinator),
-            SonyProjectorLampTimerSensor(entry.runtime_data.coordinator),
-        ],
-    )
+    """Set up the media player platform."""
+    async_add_entities([SonyProjectorMediaPlayer(entry.runtime_data.coordinator)])

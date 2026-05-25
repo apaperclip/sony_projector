@@ -1,71 +1,64 @@
-"""
-Config flow for sony_projector.
-
-This module implements the main configuration flow including:
-- Initial user setup
-- Reconfiguration of existing entries
-- Reauthentication flow
-
-For more information:
-https://developers.home-assistant.io/docs/config_entries_config_flow_handler
-"""
+"""Config flow for Sony Projector."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
-from slugify import slugify
-
+from custom_components.sony_projector.api import (
+    SonyProjectorApiClientAuthenticationError,
+    SonyProjectorApiClientCommunicationError,
+    SonyProjectorApiClientError,
+    SonyProjectorCannotIdentifyError,
+)
 from custom_components.sony_projector.config_flow_handler.schemas import (
-    get_reauth_schema,
+    CONF_DISCOVERED_PROJECTOR,
     get_reconfigure_schema,
+    get_sdap_schema,
     get_user_schema,
 )
-from custom_components.sony_projector.config_flow_handler.validators import validate_credentials
-from custom_components.sony_projector.const import DOMAIN, LOGGER
+from custom_components.sony_projector.config_flow_handler.validators import validate_projector_connection
+from custom_components.sony_projector.const import (
+    CONF_ADCP_PASSWORD,
+    CONF_COMMUNITY,
+    CONF_PROTOCOL,
+    DEFAULT_ADCP_PASSWORD,
+    DEFAULT_SDCP_COMMUNITY,
+    DOMAIN,
+    LOGGER,
+    PROTOCOL_ADCP,
+)
+from custom_components.sony_projector.discovery import async_get_discovery_manager
 from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_HOST
 from homeassistant.loader import async_get_loaded_integration
 
 if TYPE_CHECKING:
     from custom_components.sony_projector.config_flow_handler.options_flow import SonyProjectorOptionsFlow
+    from custom_components.sony_projector.data import SonyProjectorAdvertisement, SonyProjectorIdentity
+    from custom_components.sony_projector.discovery import SonyProjectorDiscoveryManager
 
-# Map exception types to error keys for user-facing messages
 ERROR_MAP = {
-    "SonyProjectorApiClientAuthenticationError": "auth",
-    "SonyProjectorApiClientCommunicationError": "connection",
+    SonyProjectorApiClientAuthenticationError: "auth",
+    SonyProjectorApiClientCommunicationError: "connection",
+    SonyProjectorCannotIdentifyError: "cannot_identify",
+    SonyProjectorApiClientError: "unknown",
 }
+DISCOVERY_WAIT_SECONDS = 12.0
+DISCOVERY_WAIT_INTERVAL_SECONDS = 0.5
 
 
 class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """
-    Handle a config flow for sony_projector.
-
-    This class manages the configuration flow for the integration, including
-    initial setup, reconfiguration, and reauthentication.
-
-    Supported flows:
-    - user: Initial setup via UI
-    - reconfigure: Update existing configuration
-    - reauth: Handle expired credentials
-
-    For more details:
-    https://developers.home-assistant.io/docs/config_entries_config_flow_handler
-    """
+    """Handle a config flow for Sony Projector."""
 
     VERSION = 1
+    _sdap_data: dict[str, Any] | None = None
+    _discovery_wait_done = False
+    _discovery_wait_task: asyncio.Task[None] | None = None
 
     @staticmethod
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> SonyProjectorOptionsFlow:
-        """
-        Get the options flow for this handler.
-
-        Returns:
-            The options flow instance for modifying integration options.
-
-        """
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> SonyProjectorOptionsFlow:
+        """Get the options flow for this handler."""
         from custom_components.sony_projector.config_flow_handler.options_flow import (  # noqa: PLC0415
             SonyProjectorOptionsFlow,
         )
@@ -76,170 +69,234 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """
-        Handle a flow initialized by the user.
-
-        This is the entry point when a user adds the integration from the UI.
-
-        Args:
-            user_input: The user input from the config flow form, or None for initial display.
-
-        Returns:
-            The config flow result, either showing a form or creating an entry.
-
-        """
+        """Handle manual setup from the UI."""
         errors: dict[str, str] = {}
+        manager = async_get_discovery_manager(self.hass)
+        await self._async_start_discovery(manager)
+        discoveries = self._discovery_labels()
+        if user_input is None and not discoveries and not self._discovery_wait_done:
+            return await self.async_step_discovery_wait()
 
         if user_input is not None:
-            try:
-                await validate_credentials(
-                    self.hass,
-                    username=user_input[CONF_USERNAME],
-                    password=user_input[CONF_PASSWORD],
-                )
-            except Exception as exception:  # noqa: BLE001
-                errors["base"] = self._map_exception_to_error(exception)
+            host = user_input.get(CONF_HOST, "").strip()
+            selected = user_input.get(CONF_DISCOVERED_PROJECTOR)
+            if selected:
+                advertisement = manager.advertisements[selected]
+                return await self._async_create_from_advertisement(advertisement, user_input)
+            if not host:
+                errors[CONF_HOST] = "required"
             else:
-                # Set unique ID based on username
-                # NOTE: This is just an example - use a proper unique ID in production
-                # See: https://developers.home-assistant.io/docs/config_entries_config_flow_handler#unique-ids
-                await self.async_set_unique_id(slugify(user_input[CONF_USERNAME]))
-                self._abort_if_unique_id_configured()
-
-                return self.async_create_entry(
-                    title=user_input[CONF_USERNAME],
-                    data=user_input,
-                )
+                try:
+                    identity = await self._async_validate(user_input | {CONF_HOST: host})
+                except Exception as exception:  # noqa: BLE001
+                    errors["base"] = self._map_exception_to_error(exception)
+                else:
+                    await self.async_set_unique_id(identity.unique_id)
+                    self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+                    return self.async_create_entry(
+                        title=self._entry_title(identity, host),
+                        data=self._entry_data(user_input | {CONF_HOST: host}, identity.unique_id),
+                    )
 
         integration = async_get_loaded_integration(self.hass, DOMAIN)
-        assert integration.documentation is not None, "Integration documentation URL is not set in manifest.json"
-
         return self.async_show_form(
             step_id="user",
-            data_schema=get_user_schema(user_input),
+            data_schema=get_user_schema(user_input, discoveries),
             errors=errors,
+            description_placeholders={"documentation_url": integration.documentation or ""},
+        )
+
+    async def async_step_discovery_wait(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Wait briefly for the first SDAP advertisement before showing setup."""
+        manager = async_get_discovery_manager(self.hass)
+        await self._async_start_discovery(manager)
+
+        if self._discovery_wait_task is None:
+            self._discovery_wait_task = self.hass.async_create_task(self._async_wait_for_discoveries(manager))
+
+        if not self._discovery_wait_task.done():
+            return self.async_show_progress(
+                step_id="discovery_wait",
+                progress_action="discovering",
+                progress_task=self._discovery_wait_task,
+            )
+
+        self._discovery_wait_done = True
+        self._discovery_wait_task = None
+        return self.async_show_progress_done(next_step_id="user")
+
+    async def async_step_sdap(
+        self,
+        discovery_info: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Handle a projector discovered via SDAP advertisement."""
+        if discovery_info is not None:
+            self._sdap_data = discovery_info
+            unique_id = discovery_info["unique_id"]
+            await self.async_set_unique_id(unique_id)
+            self._abort_if_unique_id_configured(updates={CONF_HOST: discovery_info["host"]})
+            self.context["title_placeholders"] = {
+                "name": discovery_info.get("product_name") or "Sony Projector",
+            }
+
+        assert self._sdap_data is not None
+        return self.async_show_form(
+            step_id="sdap_confirm",
+            data_schema=get_sdap_schema(self._sdap_defaults(self._sdap_data)),
             description_placeholders={
-                "documentation_url": integration.documentation,
+                "host": self._sdap_data["host"],
+                "name": self._sdap_data.get("product_name") or "Sony Projector",
             },
         )
+
+    async def async_step_sdap_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Confirm adding an SDAP-discovered projector."""
+        assert self._sdap_data is not None
+        if user_input is None:
+            return await self.async_step_sdap()
+
+        return await self._async_create_from_advertisement_data(self._sdap_data, user_input)
 
     async def async_step_reconfigure(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """
-        Handle reconfiguration of the integration.
-
-        Allows users to update their credentials without removing and re-adding
-        the integration.
-
-        Args:
-            user_input: The user input from the reconfigure form, or None for initial display.
-
-        Returns:
-            The config flow result, either showing a form or updating the entry.
-
-        """
+        """Handle reconfiguration of an existing projector."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            try:
-                await validate_credentials(
-                    self.hass,
-                    username=user_input[CONF_USERNAME],
-                    password=user_input[CONF_PASSWORD],
-                )
-            except Exception as exception:  # noqa: BLE001
-                errors["base"] = self._map_exception_to_error(exception)
+            host = user_input.get(CONF_HOST, "").strip()
+            if not host:
+                errors[CONF_HOST] = "required"
             else:
-                return self.async_update_reload_and_abort(
-                    entry,
-                    data=user_input,
-                )
+                try:
+                    identity = await self._async_validate(user_input | {CONF_HOST: host})
+                except Exception as exception:  # noqa: BLE001
+                    errors["base"] = self._map_exception_to_error(exception)
+                else:
+                    if entry.unique_id != identity.unique_id:
+                        errors["base"] = "wrong_device"
+                    else:
+                        return self.async_update_reload_and_abort(
+                            entry,
+                            data=self._entry_data(user_input | {CONF_HOST: host}, identity.unique_id),
+                        )
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=get_reconfigure_schema(entry.data.get(CONF_USERNAME, "")),
+            data_schema=get_reconfigure_schema(entry.data),
             errors=errors,
         )
 
-    async def async_step_reauth(
+    async def _async_create_from_advertisement(
         self,
-        entry_data: dict[str, Any] | None = None,
+        advertisement: SonyProjectorAdvertisement,
+        user_input: dict[str, Any],
     ) -> config_entries.ConfigFlowResult:
-        """
-        Handle reauthentication when credentials are invalid.
-
-        This flow is automatically triggered when the coordinator catches
-        an authentication error (ConfigEntryAuthFailed).
-
-        Args:
-            entry_data: The existing entry data (unused, per convention).
-
-        Returns:
-            The result of the reauth_confirm step.
-
-        """
-        return await self.async_step_reauth_confirm()
-
-    async def async_step_reauth_confirm(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """
-        Handle reauthentication confirmation.
-
-        Shows the reauthentication form and processes updated credentials.
-
-        Args:
-            user_input: The user input with updated credentials, or None for initial display.
-
-        Returns:
-            The config flow result, either showing a form or updating the entry.
-
-        """
-        entry = self._get_reauth_entry()
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            try:
-                await validate_credentials(
-                    self.hass,
-                    username=user_input[CONF_USERNAME],
-                    password=user_input[CONF_PASSWORD],
-                )
-            except Exception as exception:  # noqa: BLE001
-                errors["base"] = self._map_exception_to_error(exception)
-            else:
-                return self.async_update_reload_and_abort(
-                    entry,
-                    data={**entry.data, **user_input},
-                )
-
-        return self.async_show_form(
-            step_id="reauth_confirm",
-            data_schema=get_reauth_schema(entry.data.get(CONF_USERNAME, "")),
-            errors=errors,
-            description_placeholders={
-                "username": entry.data.get(CONF_USERNAME, ""),
+        return await self._async_create_from_advertisement_data(
+            {
+                "host": advertisement.host,
+                "unique_id": advertisement.unique_id,
+                "community": advertisement.community,
+                "product_name": advertisement.product_name,
             },
+            user_input,
         )
+
+    async def _async_create_from_advertisement_data(
+        self,
+        discovery_data: dict[str, Any],
+        user_input: dict[str, Any],
+    ) -> config_entries.ConfigFlowResult:
+        unique_id = discovery_data["unique_id"]
+        await self.async_set_unique_id(unique_id)
+        self._abort_if_unique_id_configured(updates={CONF_HOST: discovery_data["host"]})
+        data = self._entry_data(
+            {
+                **user_input,
+                CONF_HOST: discovery_data["host"],
+                CONF_COMMUNITY: user_input.get(CONF_COMMUNITY)
+                or discovery_data.get("community")
+                or DEFAULT_SDCP_COMMUNITY,
+            },
+            unique_id,
+        )
+        return self.async_create_entry(
+            title=discovery_data.get("product_name") or f"Sony Projector {discovery_data['host']}",
+            data=data,
+        )
+
+    async def _async_validate(self, user_input: dict[str, Any]) -> SonyProjectorIdentity:
+        return await validate_projector_connection(
+            host=user_input[CONF_HOST],
+            protocol=user_input[CONF_PROTOCOL],
+            community=user_input.get(CONF_COMMUNITY) or DEFAULT_SDCP_COMMUNITY,
+            adcp_password=user_input.get(CONF_ADCP_PASSWORD) or DEFAULT_ADCP_PASSWORD,
+        )
+
+    def _entry_data(self, user_input: dict[str, Any], unique_id: str) -> dict[str, Any]:
+        protocol = user_input[CONF_PROTOCOL]
+        data: dict[str, Any] = {
+            CONF_HOST: user_input[CONF_HOST],
+            CONF_PROTOCOL: protocol,
+        }
+        if protocol == PROTOCOL_ADCP:
+            data[CONF_ADCP_PASSWORD] = user_input.get(CONF_ADCP_PASSWORD) or DEFAULT_ADCP_PASSWORD
+        else:
+            data[CONF_COMMUNITY] = user_input.get(CONF_COMMUNITY) or DEFAULT_SDCP_COMMUNITY
+        data["unique_id"] = unique_id
+        return data
+
+    def _entry_title(self, identity: SonyProjectorIdentity, host: str) -> str:
+        return identity.model or identity.location or f"Sony Projector {host}"
+
+    def _discovery_labels(self) -> dict[str, str]:
+        manager = async_get_discovery_manager(self.hass)
+        return {
+            unique_id: self._discovery_label(unique_id, advertisement)
+            for unique_id, advertisement in manager.advertisements.items()
+        }
+
+    def _discovery_label(self, unique_id: str, advertisement: SonyProjectorAdvertisement) -> str:
+        """Return a useful label for a discovered projector."""
+        model = advertisement.product_name or "Sony Projector"
+        serial = advertisement.serial_number or unique_id
+        return f"{model} - {advertisement.host} - {serial}"
+
+    def _sdap_defaults(self, data: dict[str, Any]) -> dict[str, Any]:
+        return {
+            CONF_PROTOCOL: data.get(CONF_PROTOCOL),
+            CONF_COMMUNITY: data.get(CONF_COMMUNITY) or data.get("community") or DEFAULT_SDCP_COMMUNITY,
+            CONF_ADCP_PASSWORD: DEFAULT_ADCP_PASSWORD,
+        }
+
+    async def _async_start_discovery(self, manager: Any) -> None:
+        """Start SDAP discovery when the user opens the config flow."""
+        try:
+            await manager.async_start()
+        except OSError as exception:
+            LOGGER.warning("Unable to start Sony projector SDAP listener: %s", exception)
+
+    async def _async_wait_for_discoveries(self, manager: SonyProjectorDiscoveryManager) -> None:
+        """Wait until at least one SDAP advertisement is cached or timeout expires."""
+        for _ in range(round(DISCOVERY_WAIT_SECONDS / DISCOVERY_WAIT_INTERVAL_SECONDS)):
+            if manager.advertisements:
+                return
+            await asyncio.sleep(DISCOVERY_WAIT_INTERVAL_SECONDS)
 
     def _map_exception_to_error(self, exception: Exception) -> str:
-        """
-        Map API exceptions to user-facing error keys.
-
-        Args:
-            exception: The exception that was raised.
-
-        Returns:
-            The error key for display in the config flow form.
-
-        """
         LOGGER.warning("Error in config flow: %s", exception)
-        exception_name = type(exception).__name__
-        return ERROR_MAP.get(exception_name, "unknown")
+        for exception_type, error in ERROR_MAP.items():
+            if isinstance(exception, exception_type):
+                return error
+        return "unknown"
 
 
 __all__ = ["SonyProjectorConfigFlowHandler"]
