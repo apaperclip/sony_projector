@@ -1,163 +1,107 @@
 # Examples
 
-This page provides ready-to-use examples for automations, dashboards, and blueprints
-with the Sony Projector custom integration.
-
-Replace entity IDs like `sensor.device_name_*` with your actual entity IDs after
-setting up the integration.
+Replace entity IDs with the entities Home Assistant created for your projector.
 
 ## Automations
 
-### Notify when a sensor exceeds a threshold
+### Turn Projector On
 
 ```yaml
 automation:
-  - alias: "Alert when sensor is high"
+  - alias: "Turn projector on for movie night"
     trigger:
-      - trigger: numeric_state
-        entity_id: sensor.device_name_air_quality
-        above: 100
+      - trigger: time
+        at: "19:00:00"
+    action:
+      - action: media_player.turn_on
+        target:
+          entity_id: media_player.vpl_vw285es_projector
+```
+
+### Select HDMI 1 After Startup
+
+```yaml
+automation:
+  - alias: "Select projector HDMI 1 when on"
+    trigger:
+      - trigger: state
+        entity_id: sensor.vpl_vw285es_power_status
+        to: "on"
+    action:
+      - action: media_player.select_source
+        target:
+          entity_id: media_player.vpl_vw285es_projector
+        data:
+          source: hdmi1
+```
+
+### Notify If Projector Is Cooling
+
+```yaml
+automation:
+  - alias: "Projector cooling notification"
+    trigger:
+      - trigger: state
+        entity_id: sensor.vpl_vw285es_power_status
+        to:
+          - "cooling"
+          - "cooling2"
     action:
       - action: notify.notify
         data:
-          title: "Air quality alert"
-          message: "Sensor value exceeded 100!"
+          title: "Projector cooling"
+          message: "The projector is cooling down. Avoid removing power."
 ```
 
-### Turn on a switch when connectivity is lost
+### Turn Projector Off at Night
 
 ```yaml
 automation:
-  - alias: "React to connectivity loss"
-    trigger:
-      - trigger: state
-        entity_id: binary_sensor.device_name_connectivity
-        to: "off"
-        for:
-          minutes: 5
-    action:
-      - action: switch.turn_off
-        target:
-          entity_id: switch.device_name_switch
-```
-
-### Call a service action on schedule
-
-```yaml
-automation:
-  - alias: "Reset filter counter weekly"
+  - alias: "Turn projector off late"
     trigger:
       - trigger: time
-        at: "03:00:00"
+        at: "23:30:00"
     condition:
-      - condition: time
-        weekday:
-          - mon
+      - condition: state
+        entity_id: media_player.vpl_vw285es_projector
+        state: "on"
     action:
-      - action: sony_projector.example_service
+      - action: media_player.turn_off
         target:
-          entity_id: button.device_name_reset_filter
-```
-
-### Use a blueprint for threshold alerts
-
-Save this as a blueprint file and import it in Home Assistant:
-
-```yaml
-blueprint:
-  name: Sony Projector — Threshold Alert
-  description: Send a notification when a sensor exceeds a configurable threshold.
-  domain: automation
-  input:
-    sensor_entity:
-      name: Sensor
-      selector:
-        entity:
-          domain: sensor
-          integration: sony_projector
-    threshold:
-      name: Threshold value
-      selector:
-        number:
-          min: 0
-          max: 1000
-    notify_target:
-      name: Notification service
-      default: notify.notify
-      selector:
-        text:
-
-trigger:
-  - trigger: numeric_state
-    entity_id: !input sensor_entity
-    above: !input threshold
-
-action:
-  - action: !input notify_target
-    data:
-      message: >-
-        {{ state_attr(trigger.entity_id, 'friendly_name') }}
-        exceeded {{ threshold }} (current value: {{ trigger.to_state.state }}).
+          entity_id: media_player.vpl_vw285es_projector
 ```
 
 ## Dashboard Cards
 
-### Sensor value card
+### Projector Controls
 
 ```yaml
-type: sensor
-entity: sensor.device_name_air_quality
-name: Air Quality
-graph: line
+type: media-control
+entity: media_player.vpl_vw285es_projector
 ```
 
-### Device summary — entities card
+### Projector Status
 
 ```yaml
 type: entities
-title: My Device
+title: Sony Projector
 entities:
-  - entity: sensor.device_name_air_quality
-    name: Air Quality
-  - entity: binary_sensor.device_name_connectivity
-    name: Connected
-  - entity: binary_sensor.device_name_filter
-    name: Filter Status
-  - entity: switch.device_name_switch
-    name: Power
-  - entity: select.device_name_fan_speed
-    name: Fan Speed
-  - entity: number.device_name_threshold
-    name: Threshold
+  - entity: media_player.vpl_vw285es_projector
+  - entity: sensor.vpl_vw285es_power_status
+  - entity: sensor.vpl_vw285es_lamp_timer
 ```
 
-### Status badge — multiple entities
-
-```yaml
-type: glance
-title: Device Status
-entities:
-  - entity: binary_sensor.device_name_connectivity
-    name: Online
-  - entity: sensor.device_name_air_quality
-    name: Air Quality
-  - entity: binary_sensor.device_name_filter
-    name: Filter
-show_state: true
-```
-
-### History graph
+### Power State History
 
 ```yaml
 type: history-graph
-title: Air Quality (last 24 h)
+title: Projector Power Status
 entities:
-  - entity: sensor.device_name_air_quality
+  - entity: sensor.vpl_vw285es_power_status
 hours_to_show: 24
 ```
 
 ## Related Documentation
 
-- [Configuration Reference](./CONFIGURATION.md) - All configuration options
-- [Getting Started](./GETTING_STARTED.md) - Installation and initial setup
-- [GitHub Issues](https://github.com/apaperclip/sony_projector/issues) - Report problems
+- [Configuration Reference](./CONFIGURATION.md)
+- [Getting Started](./GETTING_STARTED.md)

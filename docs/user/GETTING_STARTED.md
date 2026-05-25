@@ -1,191 +1,87 @@
-# Getting Started with Sony Projector
+# Getting Started
 
-This guide will help you install and set up the Sony Projector custom integration for Home Assistant.
+This guide covers installing and adding the Sony Projector integration to Home Assistant.
 
 ## Prerequisites
 
-- Home Assistant 2025.7.0 or newer
-- HACS (Home Assistant Community Store) installed
-- Network connectivity to [external service/device]
+- Home Assistant 2026.4.0 or newer
+- HACS 2.0.5 or newer for HACS installation
+- Network access from Home Assistant to the projector
+- A Sony projector that supports SDCP or ADCP
 
 ## Installation
 
-### Via HACS (Recommended)
+### HACS
 
-1. Open HACS in your Home Assistant instance
-2. Go to "Integrations"
-3. Click the three dots in the top right corner
-4. Select "Custom repositories"
-5. Add this repository URL: `https://github.com/apaperclip/sony_projector`
-6. Set category to "Integration"
-7. Click "Add"
-8. Find "Sony Projector" in the integration list
-9. Click "Download"
-10. Restart Home Assistant
+1. Open HACS.
+2. Go to **Integrations**.
+3. Add `https://github.com/apaperclip/sony_projector` as a custom repository.
+4. Download **Sony Projector**.
+5. Restart Home Assistant.
 
-### Manual Installation
+### Manual
 
-1. Download the latest release from the [releases page](https://github.com/apaperclip/sony_projector/releases)
-2. Extract the `sony_projector` folder from the archive
-3. Copy it to `custom_components/sony_projector/` in your Home Assistant configuration directory
-4. Restart Home Assistant
+1. Download the latest release from GitHub.
+2. Copy `custom_components/sony_projector/` into your Home Assistant configuration directory.
+3. Restart Home Assistant.
 
 ## Initial Setup
 
-After installation, add the integration:
+1. Go to **Settings** -> **Devices & Services**.
+2. Click **Add Integration**.
+3. Search for **Sony Projector**.
+4. Choose **Listen for discovery (up to 60 seconds)** or **Add manually**.
+5. If listening, wait for the discovery screen to find projectors, then select the projector to add.
+   If no projector is found within 60 seconds, choose **Search again** or **Add manually**.
+6. If adding manually, enter the projector host/IP address.
+7. Choose `sdcp` or `adcp`.
+8. Keep the default community/password unless your projector is configured differently.
 
-1. Go to **Settings** → **Devices & Services**
-2. Click **+ Add Integration**
-3. Search for "Sony Projector"
-4. Follow the configuration steps:
+Discovered projectors are shown with model, IP address, and serial number when those fields are available.
 
-### Step 1: Connection Information
+## Created Entities
 
-Enter the required connection details:
+The integration creates one device for each config entry.
 
-- **Host/IP Address:** The hostname or IP address of your device/service
-- **API Key/Token:** Your authentication credentials (if applicable)
-- **Port:** Connection port (default: 8080)
+The default entities are:
 
-Click **Submit** to test the connection.
+- `media_player.<projector>_projector`
+- `sensor.<projector>_power_status`
+- `sensor.<projector>_lamp_timer`
 
-### Step 2: Configuration Options
+The lamp timer sensor is diagnostic and disabled by default.
 
-Configure optional settings:
-
-- **Update Interval:** How often to poll for updates (default: 5 minutes)
-- **Name:** Friendly name for this integration instance
-
-Click **Submit** to complete setup.
-
-## What Gets Created
-
-After successful setup, the integration creates:
-
-### Devices
-
-- **Device Name:** Main device representing your connected service/hardware
-  - Model information
-  - Software version
-  - Configuration URL (link to device web interface)
-
-### Entities
-
-The following entities are automatically created:
-
-#### Sensors
-
-- `sensor.<device_name>_<sensor_name>` - Descriptive sensor measurements
-- More sensors as applicable to your setup
-
-#### Binary Sensors
-
-- `binary_sensor.<device_name>_<sensor_name>` - On/off status indicators
-
-#### Switches
-
-- `switch.<device_name>_<switch_name>` - Controllable on/off switches
-
-#### Other Platforms
-
-Additional entities may be created depending on your device capabilities.
-
-## First Steps
-
-### Dashboard Cards
-
-Add entities to your dashboard:
-
-1. Go to your dashboard
-2. Click **Edit Dashboard** → **Add Card**
-3. Choose card type (e.g., "Entities", "Glance")
-4. Select entities from "Sony Projector"
-
-Example entities card:
+## First Dashboard Card
 
 ```yaml
 type: entities
 title: Sony Projector
 entities:
-  - sensor.device_name_sensor
-  - binary_sensor.device_name_connectivity
-  - switch.device_name_switch
+  - media_player.vpl_vw285es_projector
+  - sensor.vpl_vw285es_power_status
+  - sensor.vpl_vw285es_lamp_timer
 ```
 
-### Automations
-
-Use the integration in automations:
-
-**Example - Trigger on sensor change:**
-
-```yaml
-automation:
-  - alias: "React to sensor value"
-    trigger:
-      - trigger: state
-        entity_id: sensor.device_name_sensor
-    action:
-      - action: notify.notify
-        data:
-          message: "Sensor changed to {{ trigger.to_state.state }}"
-```
-
-**Example - Control switch based on time:**
-
-```yaml
-automation:
-  - alias: "Turn on in morning"
-    trigger:
-      - trigger: time
-        at: "07:00:00"
-    action:
-      - action: switch.turn_on
-        target:
-          entity_id: switch.device_name_switch
-```
+Replace the entity IDs with the ones Home Assistant created for your projector.
 
 ## Troubleshooting
 
-### Connection Failed
+### Discovery Does Not Show the Projector
 
-If setup fails with connection errors:
+- Confirm Home Assistant and the projector are on the same network segment.
+- Confirm UDP traffic on port `53862` is not blocked.
+- Choose **Listen for discovery** and keep the search screen open for up to 60 seconds.
+- If no projector is found, choose **Search again** or add the projector manually.
+- Add the projector manually by IP address if SDAP discovery is unavailable.
 
-1. Verify the host/IP address is correct and reachable
-2. Check that the API key/token is valid
-3. Ensure no firewall is blocking the connection
-4. Check Home Assistant logs for detailed error messages
+### Setup Fails
 
-### Entities Not Updating
-
-If entities show "Unavailable" or don't update:
-
-1. Check that the device/service is online
-2. Verify API credentials haven't expired
-3. Review logs: **Settings** → **System** → **Logs**
-4. Try reloading the integration
-
-### Debug Logging
-
-Enable debug logging to troubleshoot issues:
-
-```yaml
-logger:
-  default: warning
-  logs:
-    custom_components.sony_projector: debug
-```
-
-Add this to `configuration.yaml`, restart, and reproduce the issue. Check logs for detailed information.
+- Check the projector IP address.
+- Try the other protocol if your model supports it.
+- Confirm the SDCP community or ADCP password.
+- Review Home Assistant logs for `custom_components.sony_projector`.
 
 ## Next Steps
 
-- See [CONFIGURATION.md](./CONFIGURATION.md) for detailed configuration options
-- See [EXAMPLES.md](./EXAMPLES.md) for more automation examples
-- Report issues at [GitHub Issues](https://github.com/apaperclip/sony_projector/issues)
-
-## Support
-
-For help and discussion:
-
-- [GitHub Discussions](https://github.com/apaperclip/sony_projector/discussions)
-- [Home Assistant Community Forum](https://community.home-assistant.io/)
+- See [CONFIGURATION.md](./CONFIGURATION.md) for setup fields and entity details.
+- See [EXAMPLES.md](./EXAMPLES.md) for automation and dashboard examples.

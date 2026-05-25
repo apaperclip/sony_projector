@@ -4,7 +4,7 @@ This document provides guidance for AI coding agents working on this Home Assist
 
 ## Project Overview
 
-This is a Home Assistant custom integration that was generated from a blueprint template. The integration follows Home Assistant Core development patterns and quality standards.
+This is a Home Assistant custom integration for Sony projectors. The integration follows Home Assistant Core development patterns and quality standards.
 
 **Integration details:**
 
@@ -182,6 +182,15 @@ As an AI agent, **aim for Silver or Gold Quality Scale** when generating code:
 **GitHub Copilot users:** These instruction files are automatically provided based on file type.
 
 ## Project-Specific Rules
+
+### Protocol Library Boundary
+
+The underlying `sony_projector_protocol` library is maintained outside this repository.
+
+- **Never modify files inside the installed `sony_projector_protocol` package** (for example under `.local/`, `site-packages/`, or the Home Assistant virtual environment)
+- Treat protocol behavior changes, parser fixes, command mappings, and protocol constants as upstream library work
+- If the integration needs a protocol-library fix, make the change in the separate `sony_projector_protocol` repository, then update or repull the dependency here
+- This repository may adapt to the library's public API, but must not patch vendored/installed library code locally
 
 ### Integration Identifiers
 

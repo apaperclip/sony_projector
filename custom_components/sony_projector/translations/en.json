@@ -2,21 +2,38 @@
   "config": {
     "step": {
       "user": {
-        "description": "Add a Sony projector manually, or choose a projector discovered from SDAP advertisements. See the [documentation]({documentation_url}) for setup details.",
+        "description": "Choose how to add a Sony projector.",
         "data": {
-          "discovered_projector": "Discovered projector",
+          "setup_method": "Setup method"
+        }
+      },
+      "manual": {
+        "description": "Enter the projector connection details.",
+        "data": {
           "host": "Host or IP address",
           "protocol": "Protocol",
           "community": "SDCP community",
           "adcp_password": "ADCP password"
         }
       },
-      "discovery_wait": {
-        "progress_action": "Searching for Sony projectors"
+      "listen": {
+        "progress_action": "Searching for Sony projectors for up to 60 seconds"
+      },
+      "discovered": {
+        "description": "Choose a discovered Sony projector.",
+        "data": {
+          "discovered_projector": "Discovered projector"
+        }
+      },
+      "discovery_failed": {
+        "description": "No Sony projectors were discovered within 60 seconds. You can search again or add the projector manually.",
+        "data": {
+          "setup_method": "Next step"
+        }
       },
       "sdap_confirm": {
         "title": "Add {name}",
-        "description": "Configure the Sony projector discovered at {host}.",
+        "description": "Configure the Sony projector discovered at {host}. Serial: {serial_number}",
         "data": {
           "protocol": "Protocol",
           "community": "SDCP community",

@@ -13,9 +13,14 @@ from custom_components.sony_projector.api import (
 )
 from custom_components.sony_projector.config_flow_handler.schemas import (
     CONF_DISCOVERED_PROJECTOR,
+    CONF_SETUP_METHOD,
+    SETUP_METHOD_LISTEN,
+    SETUP_METHOD_MANUAL,
+    get_discovery_schema,
+    get_manual_schema,
     get_reconfigure_schema,
     get_sdap_schema,
-    get_user_schema,
+    get_setup_method_schema,
 )
 from custom_components.sony_projector.config_flow_handler.validators import validate_projector_connection
 from custom_components.sony_projector.const import (
@@ -31,7 +36,6 @@ from custom_components.sony_projector.const import (
 from custom_components.sony_projector.discovery import async_get_discovery_manager
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST
-from homeassistant.loader import async_get_loaded_integration
 
 if TYPE_CHECKING:
     from custom_components.sony_projector.config_flow_handler.options_flow import SonyProjectorOptionsFlow
@@ -44,7 +48,7 @@ ERROR_MAP = {
     SonyProjectorCannotIdentifyError: "cannot_identify",
     SonyProjectorApiClientError: "unknown",
 }
-DISCOVERY_WAIT_SECONDS = 12.0
+DISCOVERY_TIMEOUT_SECONDS = 60.0
 DISCOVERY_WAIT_INTERVAL_SECONDS = 0.5
 
 
@@ -53,8 +57,7 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
     _sdap_data: dict[str, Any] | None = None
-    _discovery_wait_done = False
-    _discovery_wait_task: asyncio.Task[None] | None = None
+    _discovery_task: asyncio.Task[None] | None = None
 
     @staticmethod
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> SonyProjectorOptionsFlow:
@@ -69,20 +72,26 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
+        """Ask how the user wants to add a projector."""
+        if user_input is not None:
+            if user_input[CONF_SETUP_METHOD] == SETUP_METHOD_LISTEN:
+                return await self.async_step_listen()
+            return await self.async_step_manual()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=get_setup_method_schema(),
+        )
+
+    async def async_step_manual(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
         """Handle manual setup from the UI."""
         errors: dict[str, str] = {}
-        manager = async_get_discovery_manager(self.hass)
-        await self._async_start_discovery(manager)
-        discoveries = self._discovery_labels()
-        if user_input is None and not discoveries and not self._discovery_wait_done:
-            return await self.async_step_discovery_wait()
 
         if user_input is not None:
             host = user_input.get(CONF_HOST, "").strip()
-            selected = user_input.get(CONF_DISCOVERED_PROJECTOR)
-            if selected:
-                advertisement = manager.advertisements[selected]
-                return await self._async_create_from_advertisement(advertisement, user_input)
             if not host:
                 errors[CONF_HOST] = "required"
             else:
@@ -98,35 +107,51 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         data=self._entry_data(user_input | {CONF_HOST: host}, identity.unique_id),
                     )
 
-        integration = async_get_loaded_integration(self.hass, DOMAIN)
         return self.async_show_form(
-            step_id="user",
-            data_schema=get_user_schema(user_input, discoveries),
+            step_id="manual",
+            data_schema=get_manual_schema(user_input),
             errors=errors,
-            description_placeholders={"documentation_url": integration.documentation or ""},
         )
 
-    async def async_step_discovery_wait(
+    async def async_step_listen(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Wait briefly for the first SDAP advertisement before showing setup."""
+        """Listen for SDAP advertisements before continuing setup."""
         manager = async_get_discovery_manager(self.hass)
         await self._async_start_discovery(manager)
 
-        if self._discovery_wait_task is None:
-            self._discovery_wait_task = self.hass.async_create_task(self._async_wait_for_discoveries(manager))
+        if self._discovery_task is None:
+            self._discovery_task = self.hass.async_create_task(self._async_wait_for_discovery(manager))
 
-        if not self._discovery_wait_task.done():
+        if not self._discovery_task.done():
             return self.async_show_progress(
-                step_id="discovery_wait",
+                step_id="listen",
                 progress_action="discovering",
-                progress_task=self._discovery_wait_task,
+                progress_task=self._discovery_task,
             )
 
-        self._discovery_wait_done = True
-        self._discovery_wait_task = None
-        return self.async_show_progress_done(next_step_id="user")
+        self._discovery_task = None
+        return self.async_show_progress_done(next_step_id="discovered")
+
+    async def async_step_discovered(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Show discovered projectors or continue with the first result."""
+        manager = async_get_discovery_manager(self.hass)
+        discoveries = self._discovery_labels()
+        if not discoveries:
+            return await self.async_step_discovery_failed()
+
+        if user_input is not None:
+            selected = user_input[CONF_DISCOVERED_PROJECTOR]
+            return await self.async_step_sdap(self._advertisement_data(manager.advertisements[selected]))
+
+        return self.async_show_form(
+            step_id="discovered",
+            data_schema=get_discovery_schema(user_input, discoveries),
+        )
 
     async def async_step_sdap(
         self,
@@ -149,6 +174,7 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "host": self._sdap_data["host"],
                 "name": self._sdap_data.get("product_name") or "Sony Projector",
+                "serial_number": self._sdap_data.get("serial_number") or self._sdap_data["unique_id"],
             },
         )
 
@@ -195,18 +221,28 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_discovery_failed(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Handle no projectors found after discovery timeout."""
+        if user_input is not None:
+            if user_input[CONF_SETUP_METHOD] == SETUP_METHOD_LISTEN:
+                return await self.async_step_listen()
+            return await self.async_step_manual()
+
+        return self.async_show_form(
+            step_id="discovery_failed",
+            data_schema=get_setup_method_schema(default=SETUP_METHOD_MANUAL),
+        )
+
     async def _async_create_from_advertisement(
         self,
         advertisement: SonyProjectorAdvertisement,
         user_input: dict[str, Any],
     ) -> config_entries.ConfigFlowResult:
         return await self._async_create_from_advertisement_data(
-            {
-                "host": advertisement.host,
-                "unique_id": advertisement.unique_id,
-                "community": advertisement.community,
-                "product_name": advertisement.product_name,
-            },
+            self._advertisement_data(advertisement),
             user_input,
         )
 
@@ -284,12 +320,20 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         except OSError as exception:
             LOGGER.warning("Unable to start Sony projector SDAP listener: %s", exception)
 
-    async def _async_wait_for_discoveries(self, manager: SonyProjectorDiscoveryManager) -> None:
-        """Wait until at least one SDAP advertisement is cached or timeout expires."""
-        for _ in range(round(DISCOVERY_WAIT_SECONDS / DISCOVERY_WAIT_INTERVAL_SECONDS)):
-            if manager.advertisements:
-                return
+    async def _async_wait_for_discovery(self, manager: SonyProjectorDiscoveryManager) -> None:
+        """Keep discovery open for the full timeout so all advertisements can arrive."""
+        for _ in range(round(DISCOVERY_TIMEOUT_SECONDS / DISCOVERY_WAIT_INTERVAL_SECONDS)):
             await asyncio.sleep(DISCOVERY_WAIT_INTERVAL_SECONDS)
+
+    def _advertisement_data(self, advertisement: SonyProjectorAdvertisement) -> dict[str, Any]:
+        """Return config-flow data for an SDAP advertisement."""
+        return {
+            "host": advertisement.host,
+            "unique_id": advertisement.unique_id,
+            "community": advertisement.community,
+            "product_name": advertisement.product_name,
+            "serial_number": advertisement.serial_number,
+        }
 
     def _map_exception_to_error(self, exception: Exception) -> str:
         LOGGER.warning("Error in config flow: %s", exception)

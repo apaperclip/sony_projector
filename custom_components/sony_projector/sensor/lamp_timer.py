@@ -35,7 +35,6 @@ class SonyProjectorLampTimerSensor(SensorEntity, SonyProjectorEntity):
         """Return if lamp timer is available."""
         return bool(
             super().available
-            and self.coordinator.data.operational_available
             and self.coordinator.data.lamp_timer_supported
             and self.coordinator.data.lamp_timer is not None,
         )

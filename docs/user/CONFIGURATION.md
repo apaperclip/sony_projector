@@ -1,249 +1,78 @@
 # Configuration Reference
 
-This document describes all configuration options and settings available in the Sony Projector custom integration.
+This page describes the current configuration surface for the Sony Projector integration.
 
-## Integration Configuration
+## Setup Fields
 
-### Initial Setup Options
+| Field                | Required | Default     | Description                                  |
+| -------------------- | -------- | ----------- | -------------------------------------------- |
+| Discovered projector | No       | -           | SDAP-discovered projector to add             |
+| Host or IP address   | Manual   | -           | Projector hostname or IP address             |
+| Protocol             | Yes      | `sdcp`      | `sdcp` or `adcp`                             |
+| SDCP community       | SDCP     | `SONY`      | Community string used for SDCP communication |
+| ADCP password        | ADCP     | `Projector` | Password used for ADCP communication         |
 
-These options are configured during initial setup via the Home Assistant UI.
+When a discovered projector is selected, the host is filled from the SDAP advertisement.
 
-#### Connection Settings
+The first setup screen asks whether to listen for discovery or add manually. The discovery path shows a searching progress screen for up to 60 seconds. If one or more projectors are found, the next screen lists them so the right projector can be selected. If none are found, the flow offers **Search again** or **Add manually**.
 
-| Option      | Type    | Required | Default | Description                                  |
-| ----------- | ------- | -------- | ------- | -------------------------------------------- |
-| **Host**    | string  | Yes      | -       | Hostname or IP address of the device/service |
-| **Port**    | integer | No       | 8080    | Connection port                              |
-| **API Key** | string  | Yes\*    | -       | Authentication key or token                  |
-| **Use SSL** | boolean | No       | false   | Enable HTTPS connection                      |
+## Discovery
 
-\*Required if the device/service requires authentication.
+The integration listens for Sony SDAP advertisements on UDP port `53862`.
 
-#### Update Settings
+Discovery is used for:
 
-| Option              | Type              | Required | Default  | Description                                         |
-| ------------------- | ----------------- | -------- | -------- | --------------------------------------------------- |
-| **Update Interval** | integer (seconds) | No       | 300      | How often to poll for updates (minimum: 30 seconds) |
-| **Name**            | string            | No       | "Device" | Friendly name for the integration instance          |
+- Showing projectors in the setup flow
+- Updating the stored host if the projector IP changes
+- Updating passive power status from advertisement packets
 
-### Options Flow (Reconfiguration)
+## Reconfigure
 
-After initial setup, you can modify settings:
+Use **Settings** -> **Devices & Services** -> **Sony Projector** -> **Reconfigure** to update connection settings.
 
-1. Go to **Settings** → **Devices & Services**
-2. Find "Sony Projector"
-3. Click **Configure**
-4. Modify settings
-5. Click **Submit**
+The reconfigure flow validates that the new host is the same projector by checking the stable identity exposed by the device.
 
-**Available options:**
+## Options
 
-- Update interval
-- Name/identifier
-- Connection timeout
-- Additional features (device-specific)
+There are no configurable options in v1. The options flow is present only to provide a stable place for future settings.
 
-## Entity Configuration
+## Entities
 
-### Entity Customization
+### Media Player
 
-Customize entities via the UI or `configuration.yaml`:
+The media player supports:
 
-#### Via Home Assistant UI
+- Turn on
+- Turn off
+- Select source
 
-1. Go to **Settings** → **Devices & Services** → **Entities**
-2. Find and click the entity
-3. Click the settings icon
-4. Modify:
-   - Entity ID
-   - Name
-   - Icon
-   - Device class (for applicable entities)
-   - Area assignment
+Default sources are `hdmi1` and `hdmi2`.
 
-#### Via configuration.yaml
+### Power Status Sensor
 
-```yaml
-homeassistant:
-  customize:
-    sensor.device_name_sensor:
-      friendly_name: "Custom Sensor Name"
-      icon: mdi:custom-icon
-      unit_of_measurement: "units"
-```
+The power status sensor reports Sony protocol state names:
 
-### Disabling Entities
+| State           | Meaning                                   |
+| --------------- | ----------------------------------------- |
+| `standby`       | Projector is off or in standby            |
+| `start_up`      | Projector is starting                     |
+| `start_up_lamp` | Lamp/startup sequence is in progress      |
+| `on`            | Projector is operational                  |
+| `cooling`       | Projector is cooling down                 |
+| `cooling2`      | Secondary cooling state from the protocol |
 
-If you don't need certain entities:
+### Lamp Timer Sensor
 
-1. Go to **Settings** → **Devices & Services** → **Entities**
-2. Find the entity
-3. Click it, then click **Settings** icon
-4. Toggle **Enable entity** off
-
-Disabled entities won't update or consume resources.
+The lamp timer sensor is diagnostic and disabled by default. It becomes available only when the projector is operational and the model/protocol supports reading lamp hours.
 
 ## Services
 
-The integration provides the following services:
+The integration does not define custom service actions in v1. Use the media player services provided by Home Assistant:
 
-### `sony_projector.example_service`
+- `media_player.turn_on`
+- `media_player.turn_off`
+- `media_player.select_source`
 
-Execute an example service action on the device.
+## Diagnostics
 
-**Service data:**
-
-| Parameter   | Type           | Required | Description                                      |
-| ----------- | -------------- | -------- | ------------------------------------------------ |
-| `entity_id` | string or list | No       | Target entity/entities (if omitted, targets all) |
-| `parameter` | string         | Yes      | Service-specific parameter                       |
-| `value`     | integer        | No       | Numeric value for the action                     |
-
-**Example:**
-
-```yaml
-service: sony_projector.example_service
-target:
-  entity_id: switch.device_name_switch
-data:
-  parameter: "setting_name"
-  value: 42
-```
-
-### Using Services in Automations
-
-```yaml
-automation:
-  - alias: "Call service at sunset"
-    trigger:
-      - trigger: sun
-        event: sunset
-    action:
-      - action: sony_projector.example_service
-        target:
-          entity_id: switch.device_name_switch
-        data:
-          parameter: "mode"
-          value: 1
-```
-
-## Advanced Configuration
-
-### Multiple Instances
-
-You can add multiple instances of this integration for different devices:
-
-1. Go to **Settings** → **Devices & Services**
-2. Click **+ Add Integration**
-3. Search for "Sony Projector"
-4. Configure with different connection details
-
-Each instance creates separate entities with unique entity IDs.
-
-### Network Configuration
-
-If the device is on a different network or behind a firewall:
-
-- Ensure ports are open (default: 8080)
-- Configure port forwarding if needed
-- Consider VPN for remote access
-- Some devices may require static IP addresses
-
-### Polling Behavior
-
-The integration uses polling to fetch updates:
-
-- **Minimum interval:** 30 seconds (prevents overloading the device)
-- **Recommended interval:** 5 minutes (default)
-- **Longer intervals:** Save resources but reduce responsiveness
-
-Adjust based on your needs:
-
-- Real-time monitoring: 30-60 seconds
-- Regular updates: 5 minutes
-- Slow-changing values: 15-30 minutes
-
-## Diagnostic Data
-
-The integration provides diagnostic data for troubleshooting:
-
-1. Go to **Settings** → **Devices & Services**
-2. Find "Sony Projector"
-3. Click on the device
-4. Click **Download Diagnostics**
-
-Diagnostic data includes:
-
-- Connection status
-- Last update timestamp
-- API response data
-- Entity states
-- Error history
-
-**Privacy note:** Diagnostic data may contain sensitive information. Review before sharing.
-
-## Blueprints
-
-The integration works with Home Assistant Blueprints for reusable automations:
-
-### Example Blueprint
-
-```yaml
-blueprint:
-  name: Sony Projector Alert
-  description: Send notification when sensor exceeds threshold
-  domain: automation
-  input:
-    sensor_entity:
-      name: Sensor
-      selector:
-        entity:
-          domain: sensor
-          integration: sony_projector
-    threshold:
-      name: Threshold
-      selector:
-        number:
-          min: 0
-          max: 100
-
-trigger:
-  - trigger: numeric_state
-    entity_id: !input sensor_entity
-    above: !input threshold
-
-action:
-  - action: notify.notify
-    data:
-      message: "Sensor exceeded threshold!"
-```
-
-## Configuration Examples
-
-See [EXAMPLES.md](./EXAMPLES.md) for complete automation and dashboard examples.
-
-## Troubleshooting Configuration
-
-### Config Entry Fails to Load
-
-If the integration fails to load after configuration:
-
-1. Check Home Assistant logs for errors
-2. Verify connection details are correct
-3. Test connectivity from Home Assistant to the device
-4. Try removing and re-adding the integration
-
-### Options Don't Save
-
-If configuration changes aren't persisted:
-
-1. Check for validation errors in the UI
-2. Ensure values are within allowed ranges
-3. Review logs for detailed error messages
-4. Try restarting Home Assistant
-
-## Related Documentation
-
-- [Getting Started](./GETTING_STARTED.md) - Installation and initial setup
-- [Examples](./EXAMPLES.md) - Automation and dashboard examples
-- [GitHub Issues](https://github.com/apaperclip/sony_projector/issues) - Report problems
+Diagnostics include config entry data, coordinator state, projector identity, and the last SDAP advertisement. Sensitive values such as ADCP password and SDCP community are redacted.

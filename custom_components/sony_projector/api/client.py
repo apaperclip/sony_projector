@@ -141,29 +141,44 @@ class SonyProjectorApiClient:
         async with self._connected_projector() as projector:
             return normalize_power_status(await self._call(projector.get_power))
 
+    async def async_get_passive_data(self, current_identity: SonyProjectorIdentity | None = None) -> SonyProjectorState:
+        """Fetch data available while the projector is off or passive."""
+        async with self._connected_projector() as projector:
+            return await self._async_read_state(projector, current_identity=current_identity, include_active=False)
+
     async def async_get_active_data(self, current_identity: SonyProjectorIdentity | None = None) -> SonyProjectorState:
         """Fetch active-mode data from the projector."""
         async with self._connected_projector() as projector:
-            power_status = await self._call(projector.get_power)
-            normalized_power_status = normalize_power_status(power_status)
-            state = SonyProjectorState(
-                device_available=True,
-                operational_available=is_operational_power_status(normalized_power_status),
-                power_status=normalized_power_status,
-                normalized_power_status=normalized_power_status,
-                logical_power=is_logically_on(normalized_power_status),
-                identity=current_identity,
-                source_list=list(DEFAULT_INPUT_SOURCES),
-            )
+            return await self._async_read_state(projector, current_identity=current_identity, include_active=True)
 
-            if state.operational_available:
-                state.input = await self._call(projector.get_input)
-                state.source_list = self._merge_sources(state.input)
-                try:
-                    state.lamp_timer = await self._call(projector.get_lamp_timer)
-                except SonyProjectorApiClientUnsupportedError:
-                    state.lamp_timer_supported = False
-            return state
+    async def _async_read_state(
+        self,
+        projector: Any,
+        *,
+        current_identity: SonyProjectorIdentity | None,
+        include_active: bool,
+    ) -> SonyProjectorState:
+        """Read projector state, including data available during standby."""
+        power_status = await self._call(projector.get_power)
+        normalized_power_status = normalize_power_status(power_status)
+        state = SonyProjectorState(
+            device_available=True,
+            operational_available=is_operational_power_status(normalized_power_status),
+            power_status=normalized_power_status,
+            normalized_power_status=normalized_power_status,
+            logical_power=is_logically_on(normalized_power_status),
+            identity=current_identity,
+            source_list=list(DEFAULT_INPUT_SOURCES),
+        )
+        try:
+            state.lamp_timer = await self._call(projector.get_lamp_timer)
+        except SonyProjectorApiClientUnsupportedError:
+            state.lamp_timer_supported = False
+
+        if include_active and state.operational_available:
+            state.input = await self._call(projector.get_input)
+            state.source_list = self._merge_sources(state.input)
+        return state
 
     async def async_set_power(self, power: bool) -> None:
         """Set projector power."""

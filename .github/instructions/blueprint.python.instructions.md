@@ -147,7 +147,7 @@ See [Integration Setup Failures](https://developers.home-assistant.io/docs/integ
 
 - Format: `<integration_domain>.<action_name>`
 - Register under integration domain (not platform domain)
-- Example: `hass.services.async_register(DOMAIN, "reset_filter", handler)`
+- Example: `hass.services.async_register(DOMAIN, "refresh_status", handler)`
 
 **Event Names:**
 

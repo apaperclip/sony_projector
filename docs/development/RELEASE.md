@@ -131,7 +131,7 @@ User-Impact: none
 
 ```bash
 # 1. Work on features, commit using Conventional Commits
-git commit -m "feat(sensor): add air quality index sensor"
+git commit -m "feat(media_player): add projector source selection"
 
 # 2. Push to main — release-please opens/updates PR automatically
 

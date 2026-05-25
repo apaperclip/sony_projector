@@ -1,137 +1,106 @@
 # Architectural and Design Decisions
 
-This document records significant architectural and design decisions made during the development of this integration.
-
-## Format
-
-Each decision is documented with:
-
-- **Date:** When the decision was made
-- **Context:** Why this decision was necessary
-- **Decision:** What was decided
-- **Rationale:** Why this approach was chosen
-- **Consequences:** Expected impacts and trade-offs
-
----
+This document records decisions that are specific to the Sony Projector integration.
 
 ## Decision Log
 
-### Use DataUpdateCoordinator for All Data Fetching
+### Use External Protocol Library
 
-**Date:** 2025-11-29 (Template initialization)
+**Context:** SDCP, ADCP, and SDAP parsing are protocol concerns that can evolve independently from the Home Assistant integration.
 
-**Context:** The integration needs to fetch data from an external API and share it with multiple entities. Home Assistant provides several patterns for this.
-
-**Decision:** Use `DataUpdateCoordinator` from `homeassistant.helpers.update_coordinator` as the central data management component.
+**Decision:** Keep Sony protocol implementation in the separate `sony_projector_protocol` library and consume it from this integration.
 
 **Rationale:**
 
-- Provides built-in support for update intervals and error handling
-- Automatic retry with exponential backoff
-- Shared data access prevents duplicate API calls
-- Standard pattern recommended by Home Assistant
-- Entities automatically become unavailable when coordinator fails
+- Keeps Home Assistant code focused on entity, config flow, and coordinator behavior
+- Allows protocol fixes to be tested and released independently
+- Avoids local patches to installed dependencies
 
 **Consequences:**
 
-- All entities must inherit from `CoordinatorEntity`
-- Single update interval applies to all entities
-- Data is fetched even if no entities are enabled
-- Coordinator manages entity lifecycle and availability
+- Protocol bugs must be fixed upstream, then repulled here
+- The integration wraps and normalizes the public library API
+- Installed `sony_projector_protocol` files must not be edited in this repository
 
----
+### Use SDAP Discovery for Setup and Passive Updates
 
-### Separate API Client from Coordinator
+**Context:** Sony projectors advertise identity, host, and power information over SDAP.
 
-**Date:** 2025-11-29 (Template initialization)
-
-**Context:** The coordinator needs to fetch data, but business logic should be separated from data transport.
-
-**Decision:** Implement API communication in separate `api/client.py` module, coordinator only orchestrates updates.
+**Decision:** Run one shared SDAP listener and cache advertisements for config flow and loaded entries.
 
 **Rationale:**
 
-- Separation of concerns: transport vs. orchestration
-- Easier to test API client in isolation
-- Simpler to swap API implementation if needed
-- Clearer error handling boundaries
+- Projectors can be discovered without manually typing an IP address
+- IP changes can update the config entry host
+- Advertisement power states reduce reliance on active polling
 
 **Consequences:**
 
-- Additional abstraction layer
-- Coordinator depends on API client
-- API client raises custom exceptions for error translation
+- Discovery depends on UDP traffic reaching Home Assistant
+- Manual setup remains necessary when SDAP is unavailable
+- Config flow includes a short discovery wait before showing the user form
 
----
+### Preserve Protocol Power State Names
 
-### Platform-Specific Directories
+**Context:** Sony exposes lifecycle states such as `start_up_lamp` and `cooling2`.
 
-**Date:** 2025-11-29 (Template initialization)
-
-**Context:** Integration supports multiple platforms (sensor, binary_sensor, switch, etc.).
-
-**Decision:** Each platform gets its own directory with individual entity files.
+**Decision:** Report power status using the exact protocol state names.
 
 **Rationale:**
 
-- Clear organization as integration grows
-- Easier to find specific entity implementations
-- Supports multiple entities per platform cleanly
-- Follows Home Assistant Core pattern
+- Avoids hiding useful lifecycle detail
+- Prevents mismatch between polled data and advertisement data
+- Makes debugging with protocol logs easier
 
 **Consequences:**
 
-- More files/directories than single-file approach
-- Platform `__init__.py` must import and register entities
-- Slightly more initial setup overhead
+- Automations should use protocol states such as `start_up`, `on`, and `cooling2`
+- Media player logical state is derived separately from the status sensor
 
----
+### Use Media Player as the Primary Control Surface
 
-### EntityDescription for Static Metadata
+**Context:** Projector power and input selection map naturally to Home Assistant media player behavior.
 
-**Date:** 2025-11-29 (Template initialization)
-
-**Context:** Entities have static metadata (name, icon, device class) that doesn't change.
-
-**Decision:** Use `EntityDescription` dataclasses to define static entity metadata.
+**Decision:** Expose projector control through a `media_player` entity first.
 
 **Rationale:**
 
-- Declarative and easy to read
-- Type-safe with dataclasses
-- Recommended Home Assistant pattern
-- Separates static configuration from dynamic behavior
+- Uses familiar Home Assistant services
+- Avoids custom service actions for standard power/source operations
+- Keeps v1 small and focused
 
 **Consequences:**
 
-- Each entity type needs an EntityDescription
-- Dynamic entities need custom handling
-- Static and dynamic properties clearly separated
+- `services.yaml` is intentionally empty for v1
+- Additional entities or service actions should be added only when they expose behavior not covered by media player services
 
----
+### Use Lifecycle-Aware Polling
+
+**Context:** Some projector commands are only available when the projector is fully operational.
+
+**Decision:** Poll power status passively when the projector is off or transitioning, and poll active data only when operational or logically on.
+
+**Rationale:**
+
+- Avoids unsupported commands during standby/cooling
+- Keeps off-state polling lightweight
+- Still refreshes quickly during power transitions
+
+**Consequences:**
+
+- Lamp timer and input are only available in active mode
+- Power transition confirmation polling is separate from normal update intervals
 
 ## Future Considerations
 
-### State Restoration
+### More Sources
 
-**Status:** Not yet implemented
+The default source list is `hdmi1` and `hdmi2`. Add model-aware source discovery if the protocol library exposes it.
 
-Consider implementing state restoration for switches and configurable settings to maintain state across Home Assistant restarts when the external device is unavailable.
+### Additional Projector Controls
 
-### Multi-Device Support
+Future entities or service actions may cover picture modes, lens memory, calibration presets, or blanking if the protocol library supports them.
 
-**Status:** Not yet implemented
+### Tests
 
-Current architecture assumes single device per config entry. If multi-device support is needed, coordinator data structure will need redesign to map device ID → data.
-
-### Polling vs. Push
-
-**Status:** Uses polling
-
-Currently implements polling-based updates. If the API supports webhooks or WebSocket, consider implementing push-based updates for real-time responsiveness.
-
----
-
-## Decision Review
-
-These decisions should be reviewed periodically (suggested: quarterly or when major features are added) to ensure they still serve the integration's needs.
+The current focused tests cover API wrapper behavior and SDAP discovery. Broader coordinator and config-flow tests would be useful as behavior stabilizes.

@@ -79,13 +79,9 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
                 self._merge_state(active_state)
                 self.update_interval = timedelta(seconds=ACTIVE_POLL_INTERVAL_SECONDS)
             else:
-                LOGGER.debug("Polling passive projector power for %s", self.config_entry.entry_id)
-                power_status = await client.async_get_power_status()
-                self._state.device_available = True
-                self._state.power_status = power_status
-                self._state.normalized_power_status = power_status
-                self._state.logical_power = is_logically_on(power_status)
-                self._state.operational_available = is_operational_power_status(power_status)
+                LOGGER.debug("Polling passive projector data for %s", self.config_entry.entry_id)
+                passive_state = await client.async_get_passive_data(self._state.identity)
+                self._merge_state(passive_state)
                 if self._state.operational_available:
                     self.update_interval = timedelta(seconds=ACTIVE_POLL_INTERVAL_SECONDS)
                 else:

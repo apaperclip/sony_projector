@@ -105,7 +105,7 @@ turn_on:
 - Include realistic examples for complex fields
 - Use appropriate selectors for better UI
 - Mark fields as required only when necessary
-- Keep action names verb-based (e.g., `set_mode`, `reset_filter`)
+- Keep action names verb-based (e.g., `set_mode`, `refresh_status`)
 - Validate against schema before committing
 
 ## Related Files

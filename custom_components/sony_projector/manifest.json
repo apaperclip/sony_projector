@@ -10,7 +10,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/apaperclip/sony_projector/issues",
   "requirements": [
-    "sony-projector-protocol@git+https://github.com/apaperclip/sony_projector_protocol.git@8263b27b030c5a4e6d507711632916c208823a1b"
+    "sony-projector-protocol@git+https://github.com/apaperclip/sony_projector_protocol.git@b21a1749717e3381cfa982556a60b82e0e5217a4"
   ],
   "version": "0.1.0"
 }

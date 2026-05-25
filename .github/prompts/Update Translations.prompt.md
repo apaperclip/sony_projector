@@ -69,13 +69,13 @@ If not provided, ask for:
 
    ```json
    "services": {
-     "reset_filter": {
-       "name": "Reset Filter",
-       "description": "Reset the filter counter",
+     "refresh_status": {
+       "name": "Refresh Status",
+       "description": "Refresh projector status",
        "fields": {
          "entity_id": {
            "name": "Entity",
-           "description": "Entity to reset"
+           "description": "Entity to refresh"
          }
        }
      }

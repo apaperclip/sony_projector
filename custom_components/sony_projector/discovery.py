@@ -81,7 +81,7 @@ class SonyProjectorDiscoveryManager:
 
     def datagram_received(self, data: bytes, ip: str) -> None:
         """Schedule advertisement handling from the UDP protocol callback."""
-        self.hass.async_create_task(self._async_handle_datagram(data, ip))
+        self.hass.add_job(self._async_handle_datagram(data, ip))
 
     async def _async_handle_datagram(self, data: bytes, ip: str) -> None:
         try:
