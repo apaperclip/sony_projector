@@ -1,0 +1,13 @@
+{
+  "domain": "sony_projector",
+  "name": "Sony Projector",
+  "codeowners": [
+    "@apaperclip"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/apaperclip/sony_projector",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/apaperclip/sony_projector/issues",
+  "version": "0.1.0"
+}
