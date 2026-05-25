@@ -96,7 +96,7 @@
         "davidanson.vscode-markdownlint",
         "EditorConfig.EditorConfig",
         "esbenp.prettier-vscode",
-        "GitHub.copilot",
+        // "GitHub.copilot",
         "github.vscode-pull-request-github",
         "ms-python.python",
         "ms-python.vscode-pylance",
