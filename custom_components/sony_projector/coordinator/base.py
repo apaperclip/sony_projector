@@ -17,11 +17,13 @@ from custom_components.sony_projector.api import (
 from custom_components.sony_projector.const import (
     ACTIVE_POLL_INTERVAL_SECONDS,
     ADVERTISEMENT_TIMEOUT_SECONDS,
+    CONF_SETUP_SOURCE,
     DEFAULT_INPUT_SOURCES,
     LOGGER,
     PASSIVE_POLL_INTERVAL_SECONDS,
     POWER_CONFIRMATION_INTERVAL_SECONDS,
     POWER_CONFIRMATION_TIMEOUT_SECONDS,
+    SETUP_SOURCE_MANUAL,
 )
 from custom_components.sony_projector.data import SonyProjectorAdvertisement, SonyProjectorState
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -55,7 +57,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
             name=name,
             config_entry=config_entry,
             update_interval=timedelta(seconds=PASSIVE_POLL_INTERVAL_SECONDS),
-            always_update=False,
+            always_update=True,
         )
         self._state = SonyProjectorState(source_list=list(DEFAULT_INPUT_SOURCES))
         self._confirmation_task: asyncio.Task[None] | None = None
@@ -82,7 +84,12 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
                 LOGGER.debug("Polling passive projector data for %s", self.config_entry.entry_id)
                 passive_state = await client.async_get_passive_data(self._state.identity)
                 self._merge_state(passive_state)
-                if self._state.operational_available:
+                if self._should_poll_active_data():
+                    LOGGER.debug(
+                        "Projector %s is active after passive poll; fetching active data", self.config_entry.entry_id
+                    )
+                    active_state = await client.async_get_active_data(self._state.identity)
+                    self._merge_state(active_state)
                     self.update_interval = timedelta(seconds=ACTIVE_POLL_INTERVAL_SECONDS)
                 else:
                     self.update_interval = timedelta(seconds=PASSIVE_POLL_INTERVAL_SECONDS)
@@ -95,9 +102,8 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
             ) from exception
         except SonyProjectorApiClientCommunicationError as exception:
             self._state.last_update_error = str(exception)
-            if self._state.last_advertisement is None:
-                self._state.device_available = False
-                self._state.operational_available = False
+            self._mark_unavailable()
+            self.async_set_updated_data(self._state)
             LOGGER.warning("Projector communication failed: %s", exception)
             raise UpdateFailed(
                 translation_domain="sony_projector",
@@ -116,8 +122,11 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
     def async_apply_advertisement(self, advertisement: SonyProjectorAdvertisement) -> None:
         """Apply an SDAP advertisement and publish updated lifecycle state."""
         previous_mode = self._state.operational_available
-        self._state.device_available = True
         self._state.last_advertisement = advertisement
+        if self.config_entry.data.get(CONF_SETUP_SOURCE) == SETUP_SOURCE_MANUAL or not self._state.device_available:
+            self.async_set_updated_data(self._state)
+            return
+
         power_status = normalize_power_status(advertisement.power_status)
         self._state.power_status = power_status
         self._state.normalized_power_status = power_status
@@ -160,6 +169,20 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self.async_set_updated_data(self._state)
         await self.async_request_refresh()
 
+    async def async_set_picture_mode(self, picture_mode: str) -> None:
+        """Set ADCP picture mode and update state optimistically."""
+        await self.config_entry.runtime_data.client.async_set_picture_mode(picture_mode)
+        self._state.picture_mode = picture_mode
+        self.async_set_updated_data(self._state)
+        await self.async_request_refresh()
+
+    async def async_set_calibration_preset(self, calibration_preset: str) -> None:
+        """Set SDCP calibration preset and update state optimistically."""
+        await self.config_entry.runtime_data.client.async_set_calibration_preset(calibration_preset)
+        self._state.calibration_preset = calibration_preset
+        self.async_set_updated_data(self._state)
+        await self.async_request_refresh()
+
     async def async_shutdown(self) -> None:
         """Cancel background work and close client resources."""
         if self._confirmation_task is not None:
@@ -173,11 +196,29 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.normalized_power_status = state.normalized_power_status
         self._state.logical_power = state.logical_power
         self._state.input = state.input or self._state.input
+        self._state.signal = state.signal or self._state.signal
+        self._state.signal_supported = state.signal_supported
+        self._state.picture_mode = state.picture_mode or self._state.picture_mode
+        self._state.picture_mode_supported = state.picture_mode_supported
+        self._state.calibration_preset = state.calibration_preset or self._state.calibration_preset
+        self._state.calibration_preset_supported = state.calibration_preset_supported
         self._state.lamp_timer = state.lamp_timer
         self._state.lamp_timer_supported = state.lamp_timer_supported
         self._state.identity = state.identity or self._state.identity
         self._state.last_update_error = state.last_update_error
         self._state.source_list = state.source_list or self._state.source_list
+
+    def _mark_unavailable(self) -> None:
+        """Mark live projector state unavailable after a failed poll."""
+        self._state.device_available = False
+        self._state.operational_available = False
+        self._state.power_status = None
+        self._state.normalized_power_status = None
+        self._state.logical_power = None
+        self._state.input = None
+        self._state.signal = None
+        self._state.picture_mode = None
+        self._state.calibration_preset = None
 
     def _apply_advertisement_timeout(self) -> None:
         advertisement = self._state.last_advertisement
@@ -206,12 +247,16 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
                 power_status = await self.config_entry.runtime_data.client.async_get_power_status()
             except SonyProjectorApiClientError as exception:
                 LOGGER.debug("Power confirmation poll failed: %s", exception)
+                self._state.last_update_error = str(exception)
+                self._mark_unavailable()
+                self.async_set_updated_data(self._state)
                 continue
             self._state.power_status = power_status
             self._state.normalized_power_status = power_status
             self._state.logical_power = is_logically_on(power_status)
             self._state.operational_available = is_operational_power_status(power_status)
             self._state.device_available = True
+            self._state.last_update_error = None
             self.async_set_updated_data(self._state)
             if self._is_power_confirmation_complete(target_power):
                 LOGGER.debug("Power confirmation complete for target=%s", target_power)

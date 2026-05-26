@@ -8,13 +8,24 @@ This page describes the current configuration surface for the Sony Projector int
 | -------------------- | -------- | ----------- | -------------------------------------------- |
 | Discovered projector | No       | -           | SDAP-discovered projector to add             |
 | Host or IP address   | Manual   | -           | Projector hostname or IP address             |
-| Protocol             | Yes      | `sdcp`      | `sdcp` or `adcp`                             |
+| Protocol             | Yes      | `adcp`      | `adcp` (recommended) or `sdcp`               |
 | SDCP community       | SDCP     | `SONY`      | Community string used for SDCP communication |
 | ADCP password        | ADCP     | `Projector` | Password used for ADCP communication         |
 
 When a discovered projector is selected, the host is filled from the SDAP advertisement.
 
 The first setup screen asks whether to listen for discovery or add manually. The discovery path shows a searching progress screen for up to 60 seconds. If one or more projectors are found, the next screen lists them so the right projector can be selected. If none are found, the flow offers **Search again** or **Add manually**.
+
+## Protocol-Specific Support
+
+Some advanced projector controls are protocol-specific:
+
+| Feature            | Protocol | Notes                            |
+| ------------------ | -------- | -------------------------------- |
+| Picture mode       | ADCP     | Available on ADCP-capable models |
+| Calibration preset | SDCP     | Available on SDCP-capable models |
+
+These capabilities depend on projector model support. The integration exposes them as select entities when the configured protocol supports them.
 
 ## Discovery
 
@@ -25,6 +36,8 @@ Discovery is used for:
 - Showing projectors in the setup flow
 - Updating the stored host if the projector IP changes
 - Updating passive power status from advertisement packets
+
+For manually added projectors, SDAP may update the stored host, but passive power state comes from polling.
 
 ## Reconfigure
 
@@ -48,6 +61,15 @@ The media player supports:
 
 Default sources are `hdmi1` and `hdmi2`.
 
+### Select Entities
+
+Protocol-specific select entities are created only when the configured protocol supports them:
+
+- ADCP: Picture mode
+- SDCP: Calibration preset
+
+The selects are available when the projector is reachable, powered on, and the model supports the command.
+
 ### Power Status Sensor
 
 The power status sensor reports Sony protocol state names:
@@ -61,9 +83,17 @@ The power status sensor reports Sony protocol state names:
 | `cooling`       | Projector is cooling down                 |
 | `cooling2`      | Secondary cooling state from the protocol |
 
+### IP Address Sensor
+
+The IP address sensor is diagnostic and shows the configured projector host or IP address. It updates when SDAP discovery updates the stored host.
+
+### Signal Sensor
+
+The signal sensor is diagnostic and available only for ADCP entries. It reports the projector signal state when the projector is reachable, powered on, and the model supports the command.
+
 ### Lamp Timer Sensor
 
-The lamp timer sensor is diagnostic and disabled by default. It becomes available only when the projector is operational and the model/protocol supports reading lamp hours.
+The lamp timer sensor is diagnostic and enabled by default. It becomes available when the projector is reachable and the model/protocol supports reading lamp hours.
 
 ## Services
 
@@ -76,3 +106,7 @@ The integration does not define custom service actions in v1. Use the media play
 ## Diagnostics
 
 Diagnostics include config entry data, coordinator state, projector identity, and the last SDAP advertisement. Sensitive values such as ADCP password and SDCP community are redacted.
+
+## Error handling
+
+If the projector is not available when it is polled, the entities should all be unavailable.

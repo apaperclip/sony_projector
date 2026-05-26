@@ -89,8 +89,22 @@
       "power_status": {
         "name": "Power Status"
       },
+      "ip_address": {
+        "name": "IP Address"
+      },
+      "signal": {
+        "name": "Signal"
+      },
       "lamp_timer": {
         "name": "Lamp Timer"
+      }
+    },
+    "select": {
+      "picture_mode": {
+        "name": "Picture Mode"
+      },
+      "calibration_preset": {
+        "name": "Calibration Preset"
       }
     }
   }

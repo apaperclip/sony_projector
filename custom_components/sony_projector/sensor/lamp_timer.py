@@ -14,7 +14,6 @@ ENTITY_DESCRIPTION = SensorEntityDescription(
     device_class=SensorDeviceClass.DURATION,
     native_unit_of_measurement=UnitOfTime.HOURS,
     state_class=SensorStateClass.TOTAL_INCREASING,
-    entity_registry_enabled_default=False,
 )
 
 
@@ -26,7 +25,7 @@ class SonyProjectorLampTimerSensor(SensorEntity, SonyProjectorEntity):
         super().__init__(coordinator, ENTITY_DESCRIPTION)
 
     @property
-    def native_value(self) -> int | str | None:
+    def native_value(self) -> int | float | str | None:
         """Return lamp timer value."""
         return self.coordinator.data.lamp_timer
 

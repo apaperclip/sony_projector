@@ -13,16 +13,19 @@ Home Assistant custom integration for Sony projectors using the local SDCP/ADCP 
 - Local control, no cloud account required
 - UI setup with SDAP discovery or manual host entry
 - Media player entity for power and HDMI source selection
+- Protocol-specific picture mode or calibration preset select
 - Power status sensor using protocol state names
-- Optional lamp timer diagnostic sensor
+- ADCP signal diagnostic sensor
+- Lamp timer diagnostic sensor
 - SDAP advertisements for passive availability and power-state updates
 
 ## Platforms
 
-| Platform       | Description                                      |
-| -------------- | ------------------------------------------------ |
-| `media_player` | Projector power control and source selection     |
-| `sensor`       | Power status and optional lamp timer diagnostics |
+| Platform       | Description                                          |
+| -------------- | ---------------------------------------------------- |
+| `media_player` | Projector power control and source selection         |
+| `select`       | Picture mode for ADCP, calibration preset for SDCP   |
+| `sensor`       | Power status, IP address, and lamp timer diagnostics |
 
 ## Installation
 
@@ -50,8 +53,8 @@ Home Assistant custom integration for Sony projectors using the local SDCP/ADCP 
    If no projector is found within 60 seconds, choose **Search again** or **Add manually**.
 6. If adding manually, enter the projector host/IP address.
 7. Choose the protocol:
-   - `sdcp`: default for Sony SDCP control. Uses community `SONY` unless changed.
-   - `adcp`: uses password `Projector` unless changed.
+   - `adcp`: recommended default. Uses password `Projector` unless changed.
+   - `sdcp`: uses community `SONY` unless changed.
 8. Submit the form.
 
 The discovery picker shows the model, IP address, and serial number when SDAP advertisements are received.
@@ -86,7 +89,7 @@ The power status sensor reports the protocol state name:
 
 ### Lamp Timer Sensor
 
-The lamp timer is a diagnostic sensor and is disabled by default. Enable it from the entity registry if you want to track lamp hours. Some models or protocols may not support reading the lamp timer.
+The lamp timer is a diagnostic sensor. Some models or protocols may not support reading the lamp timer.
 
 ## Troubleshooting
 

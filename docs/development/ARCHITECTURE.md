@@ -18,8 +18,9 @@ custom_components/sony_projector/
 ├── entity/                      # Base entity class
 ├── entity_utils/                # Device info and state helpers
 ├── media_player/                # Projector power/source entity
+├── select/                      # Protocol-specific projector controls
 ├── repairs.py                   # Repair flow entry point
-├── sensor/                      # Power status and lamp timer sensors
+├── sensor/                      # Power status, IP address, and lamp timer sensors
 ├── services.yaml                # Empty in v1; controls use media_player services
 └── translations/                # Home Assistant translations
 ```
@@ -63,7 +64,7 @@ Responsibilities:
 The coordinator has two polling modes:
 
 - Passive mode: poll only power status
-- Active mode: poll power, input, and optional lamp timer
+- Active mode: poll power, input, optional lamp timer, ADCP signal, and protocol-specific select state
 
 SDAP advertisements can update power state without waiting for the next poll. The coordinator stores normalized spec-state strings so polling and discovery produce consistent entity states.
 
@@ -83,7 +84,8 @@ The options flow currently has no configurable settings.
 Current platforms:
 
 - `media_player`: turn on, turn off, select source
-- `sensor`: power status and lamp timer
+- `select`: ADCP picture mode or SDCP calibration preset
+- `sensor`: power status, IP address, and lamp timer
 
 Entities read from coordinator data and do not call the API client directly.
 

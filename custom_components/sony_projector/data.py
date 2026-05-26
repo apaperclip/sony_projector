@@ -53,7 +53,13 @@ class SonyProjectorState:
     normalized_power_status: str | None = None
     logical_power: bool | None = None
     input: str | None = None
-    lamp_timer: int | str | None = None
+    signal: str | None = None
+    signal_supported: bool = True
+    picture_mode: str | None = None
+    picture_mode_supported: bool = True
+    calibration_preset: str | None = None
+    calibration_preset_supported: bool = True
+    lamp_timer: int | float | str | None = None
     lamp_timer_supported: bool = True
     identity: SonyProjectorIdentity | None = None
     last_advertisement: SonyProjectorAdvertisement | None = None

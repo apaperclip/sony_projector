@@ -1,0 +1,131 @@
+#!/bin/bash
+
+# script/protocol-version: Update sony-projector-protocol pins in requirements and manifest
+#
+# Looks up the TestPyPI wheel URL for the requested sony-projector-protocol
+# version, then updates requirements.txt and the Home Assistant manifest.json.
+#
+# Usage:
+#   ./script/protocol-version <version>
+#
+# Examples:
+#   ./script/protocol-version 0.1.4
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
+
+# shellcheck source=script/.lib/output.sh
+source "$SCRIPT_DIR/.lib/output.sh"
+
+require_command python3 "apt-get install python3"
+
+version="${1:-}"
+if [[ -z "$version" ]]; then
+    log_error "Missing protocol version"
+    echo "Usage: script/protocol-version <version>"
+    exit 1
+fi
+
+run_hook "protocol-version" "pre"
+
+log_header "Updating sony-projector-protocol to $version"
+
+python3 - "$version" <<'PY'
+from __future__ import annotations
+
+import json
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+PACKAGE = "sony-projector-protocol"
+MODULE_PACKAGE = "sony_projector_protocol"
+REQUIREMENTS = Path("requirements.txt")
+MANIFEST = Path("custom_components/sony_projector/manifest.json")
+
+
+def fail(message: str) -> None:
+    print(f"ERROR: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def load_testpypi_release(version: str) -> dict[str, object]:
+    url = f"https://test.pypi.org/pypi/{PACKAGE}/{version}/json"
+    try:
+        with urllib.request.urlopen(url, timeout=15) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception as err:
+        fail(f"Could not fetch TestPyPI metadata for {PACKAGE}=={version}: {err}")
+
+
+def wheel_url(metadata: dict[str, object]) -> str:
+    urls = metadata.get("urls")
+    if not isinstance(urls, list):
+        fail("TestPyPI metadata did not include release files")
+
+    for release_file in urls:
+        if not isinstance(release_file, dict):
+            continue
+        if release_file.get("packagetype") != "bdist_wheel":
+            continue
+        filename = release_file.get("filename")
+        url = release_file.get("url")
+        if isinstance(filename, str) and filename.startswith(f"{MODULE_PACKAGE}-") and isinstance(url, str):
+            return url
+
+    fail("Could not find a wheel file in TestPyPI metadata")
+
+
+def update_requirements(version: str) -> None:
+    text = REQUIREMENTS.read_text(encoding="utf-8")
+    pattern = re.compile(rf"^{re.escape(PACKAGE)}==[^\s#]+", re.MULTILINE)
+    replacement = f"{PACKAGE}=={version}"
+    if pattern.search(text):
+        text = pattern.sub(replacement, text, count=1)
+    else:
+        text = text.rstrip() + f"\n\n{replacement}\n"
+    REQUIREMENTS.write_text(text, encoding="utf-8")
+
+
+def update_manifest(url: str) -> None:
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    requirement = f"{PACKAGE} @ {url}"
+    requirements = manifest.setdefault("requirements", [])
+    if not isinstance(requirements, list):
+        fail("manifest.json requirements must be a list")
+
+    for index, existing in enumerate(requirements):
+        if isinstance(existing, str) and existing.split(" ", 1)[0] == PACKAGE:
+            requirements[index] = requirement
+            break
+    else:
+        requirements.append(requirement)
+
+    MANIFEST.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    version = sys.argv[1]
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:[a-zA-Z0-9.-]+)?", version):
+        fail(f"Invalid version: {version}")
+
+    metadata = load_testpypi_release(version)
+    url = wheel_url(metadata)
+    update_requirements(version)
+    update_manifest(url)
+
+    print(f"Updated {REQUIREMENTS}")
+    print(f"Updated {MANIFEST}")
+    print(f"Wheel URL: {url}")
+
+
+if __name__ == "__main__":
+    main()
+PY
+
+log_success "Protocol dependency updated"
+
+run_hook "protocol-version" "post"

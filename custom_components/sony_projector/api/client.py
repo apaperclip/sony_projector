@@ -8,7 +8,9 @@ from typing import Any
 from custom_components.sony_projector.const import (
     CONF_ADCP_PASSWORD,
     CONF_COMMUNITY,
+    DEFAULT_CALIBRATION_PRESETS,
     DEFAULT_INPUT_SOURCES,
+    DEFAULT_PICTURE_MODES,
     DEFAULT_SDCP_COMMUNITY,
     PROTOCOL_ADCP,
     PROTOCOL_SDCP,
@@ -39,6 +41,33 @@ class SonyProjectorCannotIdentifyError(SonyProjectorApiClientError):
 def _protocol_module() -> Any:
     """Return the protocol package imported lazily for HA dependency installation."""
     return import_module("sony_projector_protocol")
+
+
+def _map_protocol_exception(exception: Exception) -> SonyProjectorApiClientError | None:
+    """Map protocol exceptions to integration exceptions."""
+    protocol = _protocol_module()
+    if isinstance(exception, protocol.ProjectorAuthenticationError):
+        return SonyProjectorApiClientAuthenticationError(f"Projector authentication failed: {exception}")
+    if isinstance(exception, protocol.UnsupportedCommandError):
+        return SonyProjectorApiClientUnsupportedError(f"Projector command is unsupported: {exception}")
+    if isinstance(exception, protocol.ProjectorProtocolError) and _is_inactive_response(exception):
+        return SonyProjectorApiClientError(f"Projector command is inactive: {exception}")
+    if isinstance(exception, (protocol.ProjectorTimeoutError, TimeoutError)):
+        return SonyProjectorApiClientCommunicationError(f"Projector timed out: {exception}")
+    if isinstance(exception, (protocol.ProjectorConnectionError, OSError)):
+        return SonyProjectorApiClientCommunicationError(f"Projector connection failed: {exception}")
+    if isinstance(exception, protocol.ProjectorError):
+        return SonyProjectorApiClientError(f"Projector protocol failed: {exception}")
+    return None
+
+
+def _is_inactive_response(exception: Exception) -> bool:
+    """Return true when the projector reports an active-only command is inactive."""
+    response_text = getattr(exception, "response_text", None)
+    if response_text is None:
+        response = getattr(exception, "response", None)
+        response_text = response.decode("ascii", errors="replace") if isinstance(response, bytes) else response
+    return isinstance(response_text, str) and response_text.strip().lower() in {"err_inactive", "inactive"}
 
 
 def normalize_power_status(power_status: int | str | None) -> str | None:
@@ -171,13 +200,33 @@ class SonyProjectorApiClient:
             source_list=list(DEFAULT_INPUT_SOURCES),
         )
         try:
-            state.lamp_timer = await self._call(projector.get_lamp_timer)
+            state.lamp_timer = await self._call(self._lamp_timer_func(projector))
         except SonyProjectorApiClientUnsupportedError:
             state.lamp_timer_supported = False
 
         if include_active and state.operational_available:
             state.input = await self._call(projector.get_input)
             state.source_list = self._merge_sources(state.input)
+            if self.protocol == PROTOCOL_ADCP:
+                try:
+                    state.signal = await self._call(projector.get_signal)
+                except SonyProjectorApiClientUnsupportedError:
+                    state.signal_supported = False
+                except SonyProjectorApiClientError:
+                    pass
+                try:
+                    state.picture_mode = self._normalize_picture_mode(await self._call(projector.get_picture_mode))
+                except SonyProjectorApiClientUnsupportedError:
+                    state.picture_mode_supported = False
+                except SonyProjectorApiClientError:
+                    pass
+            if self.protocol == PROTOCOL_SDCP:
+                try:
+                    state.calibration_preset = await self._call(projector.get_calibration_preset)
+                except SonyProjectorApiClientUnsupportedError:
+                    state.calibration_preset_supported = False
+                except SonyProjectorApiClientError:
+                    pass
         return state
 
     async def async_set_power(self, power: bool) -> None:
@@ -189,6 +238,16 @@ class SonyProjectorApiClient:
         """Set projector input/source."""
         async with self._connected_projector() as projector:
             await self._call(projector.set_input, source)
+
+    async def async_set_picture_mode(self, picture_mode: str) -> None:
+        """Set the ADCP picture mode."""
+        async with self._connected_projector() as projector:
+            await self._call(projector.set_picture_mode, picture_mode)
+
+    async def async_set_calibration_preset(self, calibration_preset: str) -> None:
+        """Set the SDCP calibration preset."""
+        async with self._connected_projector() as projector:
+            await self._call(projector.set_calibration_preset, calibration_preset)
 
     async def close(self) -> None:
         """Close any persistent resources."""
@@ -209,34 +268,58 @@ class SonyProjectorApiClient:
             kwargs[CONF_ADCP_PASSWORD] = self.adcp_password
         return kwargs
 
+    def _lamp_timer_func(self, projector: Any) -> Any:
+        """Return the lamp timer command for the configured protocol."""
+        if self.protocol == PROTOCOL_ADCP:
+            return projector.get_timer
+        return projector.get_lamp_timer
+
     def _connected_projector(self) -> _ProjectorConnection:
         return _ProjectorConnection(self._projector_kwargs())
 
     async def _call(self, func: Any, *args: Any) -> Any:
-        protocol = _protocol_module()
         try:
             return await func(*args)
-        except protocol.ProjectorAuthenticationError as exception:
-            msg = f"Projector authentication failed: {exception}"
-            raise SonyProjectorApiClientAuthenticationError(msg) from exception
-        except protocol.UnsupportedCommandError as exception:
-            msg = f"Projector command is unsupported: {exception}"
-            raise SonyProjectorApiClientUnsupportedError(msg) from exception
-        except (protocol.ProjectorTimeoutError, TimeoutError) as exception:
-            msg = f"Projector timed out: {exception}"
-            raise SonyProjectorApiClientCommunicationError(msg) from exception
-        except protocol.ProjectorConnectionError as exception:
-            msg = f"Projector connection failed: {exception}"
-            raise SonyProjectorApiClientCommunicationError(msg) from exception
-        except protocol.ProjectorError as exception:
-            msg = f"Projector protocol failed: {exception}"
-            raise SonyProjectorApiClientError(msg) from exception
+        except Exception as exception:
+            mapped = _map_protocol_exception(exception)
+            if mapped is None:
+                raise
+            raise mapped from exception
 
     def _merge_sources(self, current_source: str | None) -> list[str]:
         sources: list[str] = list(DEFAULT_INPUT_SOURCES)
         if current_source and current_source not in sources:
             sources.append(current_source)
         return sources
+
+    def picture_mode_options(self, current_mode: str | None = None) -> list[str]:
+        """Return ADCP picture mode options, preserving model-specific current modes."""
+        return self._merge_options(DEFAULT_PICTURE_MODES, self._normalize_picture_mode(current_mode))
+
+    def calibration_preset_options(self, current_preset: str | None = None) -> list[str]:
+        """Return SDCP calibration preset options, preserving model-specific current presets."""
+        return self._merge_options(DEFAULT_CALIBRATION_PRESETS, current_preset)
+
+    def _merge_options(self, defaults: tuple[str, ...], current_value: str | None) -> list[str]:
+        options = list(defaults)
+        if current_value and current_value not in options:
+            options.append(current_value)
+        return options
+
+    def _normalize_picture_mode(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().strip('"').lower()
+        if "=" in normalized:
+            normalized = normalized.split("=", 1)[1].strip().strip('"')
+        normalized = normalized.replace("-", "_").replace(" ", "_")
+        return {
+            "bright_cinema": "brt_cinema",
+            "bright_tv": "brt_tv",
+            "cinema_film_1": "cinema_film1",
+            "cinema_film_2": "cinema_film2",
+            "ref": "reference",
+        }.get(normalized, normalized or None)
 
     def _string_or_none(self, value: object) -> str | None:
         if value is None:
@@ -256,7 +339,13 @@ class _ProjectorConnection:
         protocol = _protocol_module()
         projector = protocol.Projector(**self._kwargs)
         self._projector = projector
-        await projector.connect()
+        try:
+            await projector.connect()
+        except Exception as exception:
+            mapped = _map_protocol_exception(exception)
+            if mapped is None:
+                raise
+            raise mapped from exception
         return projector
 
     async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:

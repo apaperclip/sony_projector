@@ -99,7 +99,7 @@ The default source list is `hdmi1` and `hdmi2`. Add model-aware source discovery
 
 ### Additional Projector Controls
 
-Future entities or service actions may cover picture modes, lens memory, calibration presets, or blanking if the protocol library supports them.
+Picture mode and calibration preset are exposed as protocol-specific select entities. Future entities or service actions may cover lens memory, blanking, or additional picture controls if the protocol library supports them.
 
 ### Tests
 

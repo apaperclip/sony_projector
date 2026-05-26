@@ -27,11 +27,14 @@ from custom_components.sony_projector.const import (
     CONF_ADCP_PASSWORD,
     CONF_COMMUNITY,
     CONF_PROTOCOL,
+    CONF_SETUP_SOURCE,
     DEFAULT_ADCP_PASSWORD,
     DEFAULT_SDCP_COMMUNITY,
     DOMAIN,
     LOGGER,
     PROTOCOL_ADCP,
+    SETUP_SOURCE_MANUAL,
+    SETUP_SOURCE_SDAP,
 )
 from custom_components.sony_projector.discovery import async_get_discovery_manager
 from homeassistant import config_entries
@@ -104,7 +107,11 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     self._abort_if_unique_id_configured(updates={CONF_HOST: host})
                     return self.async_create_entry(
                         title=self._entry_title(identity, host),
-                        data=self._entry_data(user_input | {CONF_HOST: host}, identity.unique_id),
+                        data=self._entry_data(
+                            user_input | {CONF_HOST: host},
+                            identity.unique_id,
+                            setup_source=SETUP_SOURCE_MANUAL,
+                        ),
                     )
 
         return self.async_show_form(
@@ -212,7 +219,11 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     else:
                         return self.async_update_reload_and_abort(
                             entry,
-                            data=self._entry_data(user_input | {CONF_HOST: host}, identity.unique_id),
+                            data=self._entry_data(
+                                user_input | {CONF_HOST: host},
+                                identity.unique_id,
+                                setup_source=entry.data.get(CONF_SETUP_SOURCE, SETUP_SOURCE_MANUAL),
+                            ),
                         )
 
         return self.async_show_form(
@@ -263,6 +274,7 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 or DEFAULT_SDCP_COMMUNITY,
             },
             unique_id,
+            setup_source=SETUP_SOURCE_SDAP,
         )
         return self.async_create_entry(
             title=discovery_data.get("product_name") or f"Sony Projector {discovery_data['host']}",
@@ -277,11 +289,18 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             adcp_password=user_input.get(CONF_ADCP_PASSWORD) or DEFAULT_ADCP_PASSWORD,
         )
 
-    def _entry_data(self, user_input: dict[str, Any], unique_id: str) -> dict[str, Any]:
+    def _entry_data(
+        self,
+        user_input: dict[str, Any],
+        unique_id: str,
+        *,
+        setup_source: str,
+    ) -> dict[str, Any]:
         protocol = user_input[CONF_PROTOCOL]
         data: dict[str, Any] = {
             CONF_HOST: user_input[CONF_HOST],
             CONF_PROTOCOL: protocol,
+            CONF_SETUP_SOURCE: setup_source,
         }
         if protocol == PROTOCOL_ADCP:
             data[CONF_ADCP_PASSWORD] = user_input.get(CONF_ADCP_PASSWORD) or DEFAULT_ADCP_PASSWORD

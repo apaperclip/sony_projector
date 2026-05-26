@@ -46,10 +46,14 @@ The integration creates one device for each config entry.
 The default entities are:
 
 - `media_player.<projector>_projector`
+- ADCP: `select.<projector>_picture_mode`
+- SDCP: `select.<projector>_calibration_preset`
 - `sensor.<projector>_power_status`
+- `sensor.<projector>_ip_address`
+- ADCP: `sensor.<projector>_signal`
 - `sensor.<projector>_lamp_timer`
 
-The lamp timer sensor is diagnostic and disabled by default.
+The IP address and lamp timer sensors are diagnostic.
 
 ## First Dashboard Card
 
@@ -59,6 +63,7 @@ title: Sony Projector
 entities:
   - media_player.vpl_vw285es_projector
   - sensor.vpl_vw285es_power_status
+  - sensor.vpl_vw285es_ip_address
   - sensor.vpl_vw285es_lamp_timer
 ```
 
