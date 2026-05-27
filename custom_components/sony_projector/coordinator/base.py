@@ -198,7 +198,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.input = state.input or self._state.input
         self._state.signal = state.signal or self._state.signal
         self._state.signal_supported = state.signal_supported
-        self._state.picture_mode = state.picture_mode or self._state.picture_mode
+        self._state.picture_mode = state.picture_mode
         self._state.picture_mode_supported = state.picture_mode_supported
         self._state.calibration_preset = state.calibration_preset or self._state.calibration_preset
         self._state.calibration_preset_supported = state.calibration_preset_supported

@@ -219,7 +219,7 @@ class SonyProjectorApiClient:
                 except SonyProjectorApiClientUnsupportedError:
                     state.picture_mode_supported = False
                 except SonyProjectorApiClientError:
-                    pass
+                    state.picture_mode_supported = False
             if self.protocol == PROTOCOL_SDCP:
                 try:
                     state.calibration_preset = await self._call(projector.get_calibration_preset)
