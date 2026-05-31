@@ -32,7 +32,9 @@ class SonyProjectorCalibrationPresetSelect(SelectEntity, SonyProjectorEntity):
     @property
     def options(self) -> list[str]:
         """Return available calibration presets."""
-        return self.coordinator.config_entry.runtime_data.client.calibration_preset_options(self.current_option)
+        identity = self.coordinator.data.identity
+        model = identity.model if identity else None
+        return self.coordinator.config_entry.runtime_data.client.calibration_preset_options(model, self.current_option)
 
     @property
     def available(self) -> bool:

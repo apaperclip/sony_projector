@@ -309,7 +309,7 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             host=user_input[CONF_HOST],
             protocol=user_input[CONF_PROTOCOL],
             community=user_input.get(CONF_COMMUNITY) or DEFAULT_SDCP_COMMUNITY,
-            adcp_password=user_input.get(CONF_ADCP_PASSWORD) or DEFAULT_ADCP_PASSWORD,
+            adcp_password=self._adcp_password_or_none(user_input),
         )
 
     def _entry_data(
@@ -326,7 +326,7 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_SETUP_SOURCE: setup_source,
         }
         if protocol == PROTOCOL_ADCP:
-            data[CONF_ADCP_PASSWORD] = user_input.get(CONF_ADCP_PASSWORD) or DEFAULT_ADCP_PASSWORD
+            data[CONF_ADCP_PASSWORD] = self._adcp_password_or_none(user_input)
         else:
             data[CONF_COMMUNITY] = user_input.get(CONF_COMMUNITY) or DEFAULT_SDCP_COMMUNITY
         data["unique_id"] = unique_id
@@ -354,6 +354,12 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_COMMUNITY: data.get(CONF_COMMUNITY) or data.get("community") or DEFAULT_SDCP_COMMUNITY,
             CONF_ADCP_PASSWORD: DEFAULT_ADCP_PASSWORD,
         }
+
+    def _adcp_password_or_none(self, data: dict[str, Any]) -> str | None:
+        password = data.get(CONF_ADCP_PASSWORD)
+        if password is None:
+            return DEFAULT_ADCP_PASSWORD
+        return password or None
 
     async def _async_finish_manual_protocol(
         self,

@@ -98,10 +98,15 @@ def get_protocol_auth_schema(protocol: str, defaults: Mapping[str, Any] | None =
     defaults = defaults or {}
     schema: dict[Any, Any] = {}
     if protocol == PROTOCOL_ADCP:
+        default_password = defaults.get(CONF_ADCP_PASSWORD)
+        if default_password is None and CONF_ADCP_PASSWORD not in defaults:
+            default_password = DEFAULT_ADCP_PASSWORD
+        if default_password is None:
+            default_password = ""
         schema[
             vol.Optional(
                 CONF_ADCP_PASSWORD,
-                default=defaults.get(CONF_ADCP_PASSWORD, DEFAULT_ADCP_PASSWORD),
+                default=default_password,
             )
         ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD))
     if protocol == PROTOCOL_SDCP:

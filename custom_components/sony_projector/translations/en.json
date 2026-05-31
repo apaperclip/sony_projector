@@ -15,7 +15,7 @@
         }
       },
       "manual_adcp": {
-        "description": "Enter ADCP authentication details.",
+        "description": "Enter ADCP authentication details. Leave blank if ADCP authentication is disabled on the projector.",
         "data": {
           "adcp_password": "ADCP password"
         }
@@ -49,7 +49,7 @@
         }
       },
       "sdap_adcp": {
-        "description": "Enter ADCP authentication details.",
+        "description": "Enter ADCP authentication details. Leave blank if ADCP authentication is disabled on the projector.",
         "data": {
           "adcp_password": "ADCP password"
         }
@@ -68,7 +68,7 @@
         }
       },
       "reconfigure_adcp": {
-        "description": "Update ADCP authentication details.",
+        "description": "Update ADCP authentication details. Leave blank if ADCP authentication is disabled on the projector.",
         "data": {
           "adcp_password": "ADCP password"
         }

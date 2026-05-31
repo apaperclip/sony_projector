@@ -4,13 +4,13 @@ This page describes the current configuration surface for the Sony Projector int
 
 ## Setup Fields
 
-| Field                | Required | Default     | Description                                  |
-| -------------------- | -------- | ----------- | -------------------------------------------- |
-| Discovered projector | No       | -           | SDAP-discovered projector to add             |
-| Host or IP address   | Manual   | -           | Projector hostname or IP address             |
-| Protocol             | Yes      | `sdcp`      | `sdcp` or `adcp`                             |
-| SDCP community       | SDCP     | `SONY`      | Community string used for SDCP communication |
-| ADCP password        | ADCP     | `Projector` | Password used for ADCP communication         |
+| Field                | Required | Default     | Description                                                                            |
+| -------------------- | -------- | ----------- | -------------------------------------------------------------------------------------- |
+| Discovered projector | No       | -           | SDAP-discovered projector to add                                                       |
+| Host or IP address   | Manual   | -           | Projector hostname or IP address                                                       |
+| Protocol             | Yes      | `sdcp`      | `sdcp` or `adcp`                                                                       |
+| SDCP community       | SDCP     | `SONY`      | Community string used for SDCP communication                                           |
+| ADCP password        | ADCP     | `Projector` | Password used for ADCP communication; leave blank when ADCP authentication is disabled |
 
 When a discovered projector is selected, the host is filled from the SDAP advertisement.
 

@@ -53,7 +53,7 @@ Home Assistant custom integration for Sony projectors using the local SDCP/ADCP 
    If no projector is found within 60 seconds, choose **Search again** or **Add manually**.
 6. If adding manually, enter the projector host/IP address.
 7. Choose the protocol:
-   - `adcp`: recommended default. Uses password `Projector` unless changed.
+   - `adcp`: recommended default. Uses password `Projector` unless changed; leave blank if ADCP authentication is disabled on the projector.
    - `sdcp`: uses community `SONY` unless changed.
 8. Submit the form.
 
