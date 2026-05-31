@@ -10,7 +10,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/apaperclip/sony_projector/issues",
   "requirements": [
-    "sony-projector-protocol @ https://test-files.pythonhosted.org/packages/2b/42/afb77bf7fca5065765560985f2e1ff86c5d7eeea7cb43c06c1f67e0ff370/sony_projector_protocol-0.2.2-py3-none-any.whl"
+    "sony-projector-protocol @ https://test-files.pythonhosted.org/packages/ea/0e/9810009bb89d0f9221ec583aff1b91cc462d7811905c5e6fe709766e9c57/sony_projector_protocol-0.3.0-py3-none-any.whl"
   ],
   "version": "0.1.0"
 }
