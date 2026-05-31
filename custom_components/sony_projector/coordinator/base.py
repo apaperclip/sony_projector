@@ -284,4 +284,6 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         logical_power = is_logically_on(power_status)
         if self._power_confirmation_target is True and normalized_power_status in {"standby", "off"}:
             return True
+        if self._power_confirmation_target is False and logical_power is True:
+            return False
         return logical_power
