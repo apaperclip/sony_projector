@@ -18,6 +18,7 @@ from custom_components.sony_projector.config_flow_handler.schemas import (
     SETUP_METHOD_MANUAL,
     get_discovery_schema,
     get_manual_schema,
+    get_protocol_auth_schema,
     get_reconfigure_schema,
     get_sdap_schema,
     get_setup_method_schema,
@@ -33,6 +34,7 @@ from custom_components.sony_projector.const import (
     DOMAIN,
     LOGGER,
     PROTOCOL_ADCP,
+    PROTOCOL_SDCP,
     SETUP_SOURCE_MANUAL,
     SETUP_SOURCE_SDAP,
 )
@@ -59,7 +61,10 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Sony Projector."""
 
     VERSION = 1
+    _manual_data: dict[str, Any] | None = None
     _sdap_data: dict[str, Any] | None = None
+    _sdap_protocol_data: dict[str, Any] | None = None
+    _reconfigure_data: dict[str, Any] | None = None
     _discovery_task: asyncio.Task[None] | None = None
 
     @staticmethod
@@ -98,27 +103,28 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             if not host:
                 errors[CONF_HOST] = "required"
             else:
-                try:
-                    identity = await self._async_validate(user_input | {CONF_HOST: host})
-                except Exception as exception:  # noqa: BLE001
-                    errors["base"] = self._map_exception_to_error(exception)
-                else:
-                    await self.async_set_unique_id(identity.unique_id)
-                    self._abort_if_unique_id_configured(updates={CONF_HOST: host})
-                    return self.async_create_entry(
-                        title=self._entry_title(identity, host),
-                        data=self._entry_data(
-                            user_input | {CONF_HOST: host},
-                            identity.unique_id,
-                            setup_source=SETUP_SOURCE_MANUAL,
-                        ),
-                    )
+                self._manual_data = user_input | {CONF_HOST: host}
+                return self._show_protocol_auth_form("manual", self._manual_data)
 
         return self.async_show_form(
             step_id="manual",
             data_schema=get_manual_schema(user_input),
             errors=errors,
         )
+
+    async def async_step_manual_adcp(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Handle ADCP-specific manual setup fields."""
+        return await self._async_finish_manual_protocol(user_input)
+
+    async def async_step_manual_sdcp(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Handle SDCP-specific manual setup fields."""
+        return await self._async_finish_manual_protocol(user_input)
 
     async def async_step_listen(
         self,
@@ -194,7 +200,22 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             return await self.async_step_sdap()
 
-        return await self._async_create_from_advertisement_data(self._sdap_data, user_input)
+        self._sdap_protocol_data = user_input
+        return self._show_protocol_auth_form("sdap", user_input)
+
+    async def async_step_sdap_adcp(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Handle ADCP-specific SDAP confirmation fields."""
+        return await self._async_finish_sdap_protocol(user_input)
+
+    async def async_step_sdap_sdcp(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Handle SDCP-specific SDAP confirmation fields."""
+        return await self._async_finish_sdap_protocol(user_input)
 
     async def async_step_reconfigure(
         self,
@@ -209,28 +230,28 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             if not host:
                 errors[CONF_HOST] = "required"
             else:
-                try:
-                    identity = await self._async_validate(user_input | {CONF_HOST: host})
-                except Exception as exception:  # noqa: BLE001
-                    errors["base"] = self._map_exception_to_error(exception)
-                else:
-                    if entry.unique_id != identity.unique_id:
-                        errors["base"] = "wrong_device"
-                    else:
-                        return self.async_update_reload_and_abort(
-                            entry,
-                            data=self._entry_data(
-                                user_input | {CONF_HOST: host},
-                                identity.unique_id,
-                                setup_source=entry.data.get(CONF_SETUP_SOURCE, SETUP_SOURCE_MANUAL),
-                            ),
-                        )
+                self._reconfigure_data = user_input | {CONF_HOST: host}
+                return self._show_protocol_auth_form("reconfigure", self._reconfigure_data)
 
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=get_reconfigure_schema(entry.data),
             errors=errors,
         )
+
+    async def async_step_reconfigure_adcp(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Handle ADCP-specific reconfiguration fields."""
+        return await self._async_finish_reconfigure_protocol(user_input)
+
+    async def async_step_reconfigure_sdcp(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Handle SDCP-specific reconfiguration fields."""
+        return await self._async_finish_reconfigure_protocol(user_input)
 
     async def async_step_discovery_failed(
         self,
@@ -265,14 +286,16 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         unique_id = discovery_data["unique_id"]
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured(updates={CONF_HOST: discovery_data["host"]})
+        entry_input = {
+            **user_input,
+            CONF_HOST: discovery_data["host"],
+        }
+        if entry_input[CONF_PROTOCOL] == PROTOCOL_SDCP:
+            entry_input[CONF_COMMUNITY] = (
+                user_input.get(CONF_COMMUNITY) or discovery_data.get("community") or DEFAULT_SDCP_COMMUNITY
+            )
         data = self._entry_data(
-            {
-                **user_input,
-                CONF_HOST: discovery_data["host"],
-                CONF_COMMUNITY: user_input.get(CONF_COMMUNITY)
-                or discovery_data.get("community")
-                or DEFAULT_SDCP_COMMUNITY,
-            },
+            entry_input,
             unique_id,
             setup_source=SETUP_SOURCE_SDAP,
         )
@@ -327,10 +350,102 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     def _sdap_defaults(self, data: dict[str, Any]) -> dict[str, Any]:
         return {
-            CONF_PROTOCOL: data.get(CONF_PROTOCOL),
+            CONF_PROTOCOL: data.get(CONF_PROTOCOL) or PROTOCOL_ADCP,
             CONF_COMMUNITY: data.get(CONF_COMMUNITY) or data.get("community") or DEFAULT_SDCP_COMMUNITY,
             CONF_ADCP_PASSWORD: DEFAULT_ADCP_PASSWORD,
         }
+
+    async def _async_finish_manual_protocol(
+        self,
+        user_input: dict[str, Any] | None,
+    ) -> config_entries.ConfigFlowResult:
+        if self._manual_data is None:
+            return await self.async_step_manual()
+        if user_input is None:
+            return self._show_protocol_auth_form("manual", self._manual_data)
+
+        data = self._manual_data | user_input
+        try:
+            identity = await self._async_validate(data)
+        except Exception as exception:  # noqa: BLE001
+            return self._show_protocol_auth_form(
+                "manual",
+                data,
+                errors={"base": self._map_exception_to_error(exception)},
+            )
+
+        host = data[CONF_HOST]
+        await self.async_set_unique_id(identity.unique_id)
+        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        return self.async_create_entry(
+            title=self._entry_title(identity, host),
+            data=self._entry_data(data, identity.unique_id, setup_source=SETUP_SOURCE_MANUAL),
+        )
+
+    async def _async_finish_sdap_protocol(
+        self,
+        user_input: dict[str, Any] | None,
+    ) -> config_entries.ConfigFlowResult:
+        if self._sdap_data is None or self._sdap_protocol_data is None:
+            return await self.async_step_sdap()
+        if user_input is None:
+            return self._show_protocol_auth_form(
+                "sdap", self._sdap_defaults(self._sdap_data) | self._sdap_protocol_data
+            )
+        return await self._async_create_from_advertisement_data(
+            self._sdap_data,
+            self._sdap_protocol_data | user_input,
+        )
+
+    async def _async_finish_reconfigure_protocol(
+        self,
+        user_input: dict[str, Any] | None,
+    ) -> config_entries.ConfigFlowResult:
+        if self._reconfigure_data is None:
+            return await self.async_step_reconfigure()
+        if user_input is None:
+            return self._show_protocol_auth_form("reconfigure", self._reconfigure_data)
+
+        entry = self._get_reconfigure_entry()
+        data = self._reconfigure_data | user_input
+        try:
+            identity = await self._async_validate(data)
+        except Exception as exception:  # noqa: BLE001
+            return self._show_protocol_auth_form(
+                "reconfigure",
+                data,
+                errors={"base": self._map_exception_to_error(exception)},
+            )
+
+        if entry.unique_id != identity.unique_id:
+            return self._show_protocol_auth_form("reconfigure", data, errors={"base": "wrong_device"})
+
+        return self.async_update_reload_and_abort(
+            entry,
+            data=self._entry_data(
+                data,
+                identity.unique_id,
+                setup_source=entry.data.get(CONF_SETUP_SOURCE, SETUP_SOURCE_MANUAL),
+            ),
+        )
+
+    def _show_protocol_auth_form(
+        self,
+        step_prefix: str,
+        data: dict[str, Any],
+        *,
+        errors: dict[str, str] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        protocol = data[CONF_PROTOCOL]
+        return self.async_show_form(
+            step_id=self._protocol_step_id(step_prefix, protocol),
+            data_schema=get_protocol_auth_schema(protocol, data),
+            errors=errors,
+        )
+
+    def _protocol_step_id(self, step_prefix: str, protocol: str) -> str:
+        suffix = "adcp" if protocol == PROTOCOL_ADCP else "sdcp"
+        return f"{step_prefix}_{suffix}"
 
     async def _async_start_discovery(self, manager: Any) -> None:
         """Start SDAP discovery when the user opens the config flow."""

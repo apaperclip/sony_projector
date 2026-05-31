@@ -11,9 +11,19 @@
         "description": "Enter the projector connection details.",
         "data": {
           "host": "Host or IP address",
-          "protocol": "Protocol",
-          "community": "SDCP community",
+          "protocol": "Protocol"
+        }
+      },
+      "manual_adcp": {
+        "description": "Enter ADCP authentication details.",
+        "data": {
           "adcp_password": "ADCP password"
+        }
+      },
+      "manual_sdcp": {
+        "description": "Enter SDCP connection details.",
+        "data": {
+          "community": "SDCP community"
         }
       },
       "listen": {
@@ -35,18 +45,38 @@
         "title": "Add {name}",
         "description": "Configure the Sony projector discovered at {host}. Serial: {serial_number}",
         "data": {
-          "protocol": "Protocol",
-          "community": "SDCP community",
+          "protocol": "Protocol"
+        }
+      },
+      "sdap_adcp": {
+        "description": "Enter ADCP authentication details.",
+        "data": {
           "adcp_password": "ADCP password"
+        }
+      },
+      "sdap_sdcp": {
+        "description": "Enter SDCP connection details.",
+        "data": {
+          "community": "SDCP community"
         }
       },
       "reconfigure": {
         "description": "Update the connection settings for this Sony projector.",
         "data": {
           "host": "Host or IP address",
-          "protocol": "Protocol",
-          "community": "SDCP community",
+          "protocol": "Protocol"
+        }
+      },
+      "reconfigure_adcp": {
+        "description": "Update ADCP authentication details.",
+        "data": {
           "adcp_password": "ADCP password"
+        }
+      },
+      "reconfigure_sdcp": {
+        "description": "Update SDCP connection details.",
+        "data": {
+          "community": "SDCP community"
         }
       }
     },

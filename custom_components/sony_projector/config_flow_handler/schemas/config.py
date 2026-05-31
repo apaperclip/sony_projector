@@ -50,16 +50,6 @@ def get_setup_method_schema(default: str = SETUP_METHOD_LISTEN) -> vol.Schema:
     )
 
 
-def get_user_schema(
-    defaults: Mapping[str, Any] | None = None,
-    discoveries: Mapping[str, str] | None = None,
-) -> vol.Schema:
-    """Get schema for manual setup or selecting a discovered projector."""
-    if discoveries:
-        return get_discovery_schema(defaults, discoveries)
-    return get_manual_schema(defaults)
-
-
 def get_discovery_schema(
     defaults: Mapping[str, Any] | None = None,
     discoveries: Mapping[str, str] | None = None,
@@ -85,7 +75,7 @@ def get_discovery_schema(
 
 
 def get_manual_schema(defaults: Mapping[str, Any] | None = None) -> vol.Schema:
-    """Get schema for manually adding a projector."""
+    """Get schema for choosing manual connection details."""
     defaults = defaults or {}
     schema: dict[Any, Any] = {}
     schema[
@@ -100,18 +90,27 @@ def get_manual_schema(defaults: Mapping[str, Any] | None = None) -> vol.Schema:
             default=defaults.get(CONF_PROTOCOL, PROTOCOLS[0]),
         )
     ] = _protocol_selector()
-    schema[
-        vol.Optional(
-            CONF_COMMUNITY,
-            default=defaults.get(CONF_COMMUNITY, DEFAULT_SDCP_COMMUNITY),
-        )
-    ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
-    schema[
-        vol.Optional(
-            CONF_ADCP_PASSWORD,
-            default=defaults.get(CONF_ADCP_PASSWORD, DEFAULT_ADCP_PASSWORD),
-        )
-    ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD))
+    return vol.Schema(schema)
+
+
+def get_protocol_auth_schema(protocol: str, defaults: Mapping[str, Any] | None = None) -> vol.Schema:
+    """Get protocol-specific authentication settings schema."""
+    defaults = defaults or {}
+    schema: dict[Any, Any] = {}
+    if protocol == PROTOCOL_ADCP:
+        schema[
+            vol.Optional(
+                CONF_ADCP_PASSWORD,
+                default=defaults.get(CONF_ADCP_PASSWORD, DEFAULT_ADCP_PASSWORD),
+            )
+        ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD))
+    if protocol == PROTOCOL_SDCP:
+        schema[
+            vol.Optional(
+                CONF_COMMUNITY,
+                default=defaults.get(CONF_COMMUNITY, DEFAULT_SDCP_COMMUNITY),
+            )
+        ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
     return vol.Schema(schema)
 
 
@@ -123,21 +122,13 @@ def get_sdap_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                 CONF_PROTOCOL,
                 default=defaults.get(CONF_PROTOCOL, PROTOCOLS[0]),
             ): _protocol_selector(),
-            vol.Optional(
-                CONF_COMMUNITY,
-                default=defaults.get(CONF_COMMUNITY, DEFAULT_SDCP_COMMUNITY),
-            ): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)),
-            vol.Optional(
-                CONF_ADCP_PASSWORD,
-                default=defaults.get(CONF_ADCP_PASSWORD, DEFAULT_ADCP_PASSWORD),
-            ): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
         },
     )
 
 
 def get_reconfigure_schema(defaults: Mapping[str, Any]) -> vol.Schema:
     """Get schema for reconfiguration."""
-    return get_user_schema(defaults)
+    return get_manual_schema(defaults)
 
 
 def _protocol_selector() -> selector.SelectSelector:
@@ -158,8 +149,8 @@ __all__ = [
     "SETUP_METHOD_MANUAL",
     "get_discovery_schema",
     "get_manual_schema",
+    "get_protocol_auth_schema",
     "get_reconfigure_schema",
     "get_sdap_schema",
     "get_setup_method_schema",
-    "get_user_schema",
 ]
