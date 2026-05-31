@@ -292,9 +292,10 @@ class SonyProjectorApiClient:
             sources.append(current_source)
         return sources
 
-    def picture_mode_options(self, current_mode: str | None = None) -> list[str]:
-        """Return ADCP picture mode options, preserving model-specific current modes."""
-        return self._merge_options(DEFAULT_PICTURE_MODES, self._normalize_picture_mode(current_mode))
+    def picture_mode_options(self, model: str | None = None, current_mode: str | None = None) -> list[str]:
+        """Return ADCP picture mode options for a projector model."""
+        options = self._adcp_picture_mode_options(model)
+        return self._merge_options(options, self._normalize_picture_mode(current_mode))
 
     def calibration_preset_options(self, current_preset: str | None = None) -> list[str]:
         """Return SDCP calibration preset options, preserving model-specific current presets."""
@@ -305,6 +306,17 @@ class SonyProjectorApiClient:
         if current_value and current_value not in options:
             options.append(current_value)
         return options
+
+    def _adcp_picture_mode_options(self, model: str | None) -> tuple[str, ...]:
+        protocol = _protocol_module()
+        get_options = getattr(protocol, "get_adcp_picture_mode_options", None)
+        if model and get_options is not None:
+            model_options = get_options(model)
+            if model_options:
+                return tuple(self._normalize_picture_mode(option) or option for option in model_options)
+
+        protocol_options = getattr(protocol, "ADCP_PICTURE_MODE_VALUES", DEFAULT_PICTURE_MODES)
+        return tuple(self._normalize_picture_mode(option) or option for option in protocol_options)
 
     def _normalize_picture_mode(self, value: str | None) -> str | None:
         if value is None:

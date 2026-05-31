@@ -32,7 +32,9 @@ class SonyProjectorPictureModeSelect(SelectEntity, SonyProjectorEntity):
     @property
     def options(self) -> list[str]:
         """Return available picture modes."""
-        return self.coordinator.config_entry.runtime_data.client.picture_mode_options(self.current_option)
+        identity = self.coordinator.data.identity
+        model = identity.model if identity else None
+        return self.coordinator.config_entry.runtime_data.client.picture_mode_options(model, self.current_option)
 
     @property
     def available(self) -> bool:
