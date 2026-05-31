@@ -78,18 +78,20 @@ This document records decisions that are specific to the Sony Projector integrat
 
 **Context:** Some projector commands are only available when the projector is fully operational.
 
-**Decision:** Poll power status passively when the projector is off or transitioning, and poll active data only when operational or logically on.
+**Decision:** Poll passive data when the projector is off, and poll active data when operational, logically on, or after a power command until the requested stable power state is reached.
 
 **Rationale:**
 
 - Avoids unsupported commands during standby/cooling
 - Keeps off-state polling lightweight
 - Still refreshes quickly during power transitions
+- Uses reported lifecycle states directly instead of a separate power confirmation loop
 
 **Consequences:**
 
 - Lamp timer and input are only available in active mode
-- Power transition confirmation polling is separate from normal update intervals
+- Startup states map to media player on; cooling states map to media player off
+- Active polling after turn-off continues through cooling until the projector reports `standby` or `off`
 
 ## Future Considerations
 

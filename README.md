@@ -111,6 +111,7 @@ The lamp timer is a diagnostic sensor. Some models or protocols may not support 
 ### Power State Looks Wrong
 
 The integration intentionally reports Sony protocol power states exactly. During power transitions, `start_up`, `start_up_lamp`, `cooling`, and `cooling2` are expected.
+The media player maps startup states to on and cooling states to off; use the power status sensor when automations need exact transition states.
 
 ## Development
 

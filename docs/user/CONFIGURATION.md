@@ -56,6 +56,8 @@ The media player supports:
 
 Default sources are `hdmi1` and `hdmi2`.
 
+The media player uses the projector's lifecycle state for logical on/off. Startup states such as `start_up` and `start_up_lamp` display as on. Cooling states such as `cooling` and `cooling2` display as off. The power status sensor keeps the exact protocol state for automations that need transition details.
+
 ### Power Status Sensor
 
 The power status sensor reports Sony protocol state names:

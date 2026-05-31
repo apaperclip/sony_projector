@@ -16,10 +16,8 @@ custom_components/sony_projector/
 ├── diagnostics.py               # Diagnostics with sensitive data redaction
 ├── discovery.py                 # Shared SDAP UDP listener and advertisement cache
 ├── entity/                      # Base entity class
-├── entity_utils/                # Device info and state helpers
 ├── media_player/                # Projector power/source entity
 ├── select/                      # Protocol-specific projector controls
-├── repairs.py                   # Repair flow entry point
 ├── sensor/                      # Power status, IP address, and lamp timer sensors
 ├── services.yaml                # Empty in v1; controls use media_player services
 └── translations/                # Home Assistant translations
@@ -63,8 +61,10 @@ Responsibilities:
 
 The coordinator has two polling modes:
 
-- Passive mode: poll only power status
+- Passive mode: poll power status and passive diagnostics
 - Active mode: poll power, input, optional lamp timer, ADCP signal, and protocol-specific select state
+
+The coordinator uses active polling while the projector is operational, logically on, or while a power command is still pending. A pending turn-on clears when the projector reports `on`; a pending turn-off clears when the projector reports `standby` or `off`.
 
 SDAP advertisements can update power state without waiting for the next poll. The coordinator stores normalized spec-state strings so polling and discovery produce consistent entity states.
 
@@ -111,6 +111,8 @@ Power states are reported using Sony protocol names:
 - `cooling2`
 
 The media player maps these to Home Assistant's logical on/off state, but the power status sensor preserves the protocol state name.
+
+Startup states such as `start_up` and `start_up_lamp` map to media player on. Cooling states such as `cooling` and `cooling2` map to media player off. The coordinator does not mask lifecycle states with a separate anti-bounce layer.
 
 ## Development Notes
 

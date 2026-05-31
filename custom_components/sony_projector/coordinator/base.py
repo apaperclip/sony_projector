@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -21,8 +20,6 @@ from custom_components.sony_projector.const import (
     DEFAULT_INPUT_SOURCES,
     LOGGER,
     PASSIVE_POLL_INTERVAL_SECONDS,
-    POWER_CONFIRMATION_INTERVAL_SECONDS,
-    POWER_CONFIRMATION_TIMEOUT_SECONDS,
     SETUP_SOURCE_MANUAL,
 )
 from custom_components.sony_projector.data import SonyProjectorAdvertisement, SonyProjectorState
@@ -60,8 +57,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
             always_update=True,
         )
         self._state = SonyProjectorState(source_list=list(DEFAULT_INPUT_SOURCES))
-        self._confirmation_task: asyncio.Task[None] | None = None
-        self._power_confirmation_target: bool | None = None
+        self._pending_power_target: bool | None = None
 
     async def _async_setup(self) -> None:
         """Read identity before the first refresh."""
@@ -80,7 +76,6 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
                 LOGGER.debug("Polling active projector data for %s", self.config_entry.entry_id)
                 active_state = await client.async_get_active_data(self._state.identity)
                 self._merge_state(active_state)
-                self.update_interval = timedelta(seconds=ACTIVE_POLL_INTERVAL_SECONDS)
             else:
                 LOGGER.debug("Polling passive projector data for %s", self.config_entry.entry_id)
                 passive_state = await client.async_get_passive_data(self._state.identity)
@@ -91,9 +86,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
                     )
                     active_state = await client.async_get_active_data(self._state.identity)
                     self._merge_state(active_state)
-                    self.update_interval = timedelta(seconds=ACTIVE_POLL_INTERVAL_SECONDS)
-                else:
-                    self.update_interval = timedelta(seconds=PASSIVE_POLL_INTERVAL_SECONDS)
+            self.update_interval = self._poll_interval()
             self._state.last_update_error = None
         except SonyProjectorApiClientAuthenticationError as exception:
             LOGGER.warning("Projector authentication error: %s", exception)
@@ -131,8 +124,9 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         power_status = normalize_power_status(advertisement.power_status)
         self._state.power_status = power_status
         self._state.normalized_power_status = power_status
-        self._state.logical_power = self._logical_power_for_status(power_status)
+        self._state.logical_power = is_logically_on(power_status)
         self._state.operational_available = is_operational_power_status(power_status)
+        self._clear_pending_power_target_if_complete()
         if self._state.identity is not None:
             self._state.identity.model = self._state.identity.model or advertisement.product_name
             self._state.identity.location = self._state.identity.location or advertisement.location
@@ -144,22 +138,19 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
                 "active" if self._state.operational_available else "passive",
             )
 
-        self.update_interval = timedelta(
-            seconds=ACTIVE_POLL_INTERVAL_SECONDS
-            if self._state.operational_available
-            else PASSIVE_POLL_INTERVAL_SECONDS,
-        )
+        self.update_interval = self._poll_interval()
         self.async_set_updated_data(self._state)
 
     async def async_set_power(self, power: bool) -> None:
-        """Set logical power and start temporary confirmation polling."""
+        """Set logical power and temporarily use active polling."""
         await self.config_entry.runtime_data.client.async_set_power(power)
+        self._pending_power_target = power
         self._state.logical_power = power
         self._state.device_available = True
         if not power:
             self._state.operational_available = False
+        self.update_interval = timedelta(seconds=ACTIVE_POLL_INTERVAL_SECONDS)
         self.async_set_updated_data(self._state)
-        self._start_confirmation_polling(power)
 
     async def async_set_input(self, source: str) -> None:
         """Set projector input and update state optimistically."""
@@ -186,8 +177,6 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
 
     async def async_shutdown(self) -> None:
         """Cancel background work and close client resources."""
-        if self._confirmation_task is not None:
-            self._confirmation_task.cancel()
         await self.config_entry.runtime_data.client.close()
 
     def _merge_state(self, state: SonyProjectorState) -> None:
@@ -195,7 +184,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.operational_available = state.operational_available
         self._state.power_status = state.power_status
         self._state.normalized_power_status = state.normalized_power_status
-        self._state.logical_power = self._logical_power_for_status(state.normalized_power_status)
+        self._state.logical_power = is_logically_on(state.normalized_power_status)
         self._state.input = state.input or self._state.input
         self._state.signal = state.signal or self._state.signal
         self._state.signal_supported = state.signal_supported
@@ -208,6 +197,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.identity = state.identity or self._state.identity
         self._state.last_update_error = state.last_update_error
         self._state.source_list = state.source_list or self._state.source_list
+        self._clear_pending_power_target_if_complete()
 
     def _mark_unavailable(self) -> None:
         """Mark live projector state unavailable after a failed poll."""
@@ -233,57 +223,21 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.operational_available = False
 
     def _should_poll_active_data(self) -> bool:
-        return self._state.operational_available or self._state.logical_power is True
+        return (
+            self._state.operational_available
+            or self._state.logical_power is True
+            or self._pending_power_target is not None
+        )
 
-    def _start_confirmation_polling(self, target_power: bool) -> None:
-        if self._confirmation_task is not None:
-            self._confirmation_task.cancel()
-        self._power_confirmation_target = target_power
-        self._confirmation_task = self.hass.async_create_task(self._confirm_power(target_power))
+    def _poll_interval(self) -> timedelta:
+        """Return the next coordinator polling interval."""
+        return timedelta(
+            seconds=ACTIVE_POLL_INTERVAL_SECONDS if self._should_poll_active_data() else PASSIVE_POLL_INTERVAL_SECONDS,
+        )
 
-    async def _confirm_power(self, target_power: bool) -> None:
-        deadline = dt_util.utcnow().timestamp() + POWER_CONFIRMATION_TIMEOUT_SECONDS
-        try:
-            while dt_util.utcnow().timestamp() < deadline:
-                await asyncio.sleep(POWER_CONFIRMATION_INTERVAL_SECONDS)
-                try:
-                    power_status = await self.config_entry.runtime_data.client.async_get_power_status()
-                except SonyProjectorApiClientError as exception:
-                    LOGGER.debug("Power confirmation poll failed: %s", exception)
-                    self._state.last_update_error = str(exception)
-                    self._mark_unavailable()
-                    self.async_set_updated_data(self._state)
-                    continue
-                self._state.power_status = power_status
-                self._state.normalized_power_status = power_status
-                self._state.logical_power = self._logical_power_for_status(power_status)
-                self._state.operational_available = is_operational_power_status(power_status)
-                self._state.device_available = True
-                self._state.last_update_error = None
-                self.async_set_updated_data(self._state)
-                if self._is_power_confirmation_complete(target_power):
-                    LOGGER.debug("Power confirmation complete for target=%s", target_power)
-                    return
-        finally:
-            if self._power_confirmation_target is target_power:
-                self._power_confirmation_target = None
-                actual_logical_power = is_logically_on(self._state.normalized_power_status)
-                if self._state.logical_power != actual_logical_power:
-                    self._state.logical_power = actual_logical_power
-                    self.async_set_updated_data(self._state)
-
-    def _is_power_confirmation_complete(self, target_power: bool) -> bool:
-        """Return true when the projector has finished the requested transition."""
-        if target_power:
-            return self._state.operational_available
-        return self._state.normalized_power_status in {"standby", "off"}
-
-    def _logical_power_for_status(self, power_status: int | str | None) -> bool | None:
-        """Return logical power while preserving pending turn-on state."""
-        normalized_power_status = normalize_power_status(power_status)
-        logical_power = is_logically_on(power_status)
-        if self._power_confirmation_target is True and normalized_power_status in {"standby", "off"}:
-            return True
-        if self._power_confirmation_target is False and logical_power is True:
-            return False
-        return logical_power
+    def _clear_pending_power_target_if_complete(self) -> None:
+        """Clear pending power command once the requested stable state is reached."""
+        if self._pending_power_target is True and self._state.normalized_power_status == "on":
+            self._pending_power_target = None
+        if self._pending_power_target is False and self._state.normalized_power_status in {"standby", "off"}:
+            self._pending_power_target = None
