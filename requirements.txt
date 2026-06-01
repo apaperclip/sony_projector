@@ -4,4 +4,4 @@
 
 --index-url https://test.pypi.org/simple/
 
-sony-projector-protocol==0.3.0
+sony-projector-protocol==0.3.1
