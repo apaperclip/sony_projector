@@ -125,6 +125,12 @@
       "signal": {
         "name": "Signal"
       },
+      "error": {
+        "name": "Error"
+      },
+      "warning": {
+        "name": "Warning"
+      },
       "lamp_timer": {
         "name": "Lamp Timer"
       }
@@ -135,6 +141,9 @@
       },
       "calibration_preset": {
         "name": "Calibration Preset"
+      },
+      "color_space": {
+        "name": "Color Space"
       }
     }
   }

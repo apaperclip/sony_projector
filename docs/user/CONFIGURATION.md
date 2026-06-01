@@ -39,8 +39,7 @@ There are no configurable options in v1. The options flow is present only to pro
 
 ## Entities
 
-Add the calibration preset entity to SDCP
-Add the picture mode settting to ADCP
+ADCP entries expose picture mode and color space selects. SDCP entries expose calibration preset and color space selects.
 
 ## Device
 
@@ -54,7 +53,7 @@ The media player supports:
 - Turn off
 - Select source
 
-Default sources are `hdmi1` and `hdmi2`.
+Source options come from the model capability matrix in `sony_projector_protocol`. If the projector reports a source outside the static capability list, the integration keeps that current value available for selection.
 
 The media player uses the projector's lifecycle state for logical on/off. Startup states such as `start_up` and `start_up_lamp` display as on. Cooling states such as `cooling` and `cooling2` display as off. The power status sensor keeps the exact protocol state for automations that need transition details.
 
@@ -74,6 +73,10 @@ The power status sensor reports Sony protocol state names:
 ### Lamp Timer Sensor
 
 The lamp timer sensor is diagnostic and enabled by default. It becomes available only when the projector is operational and the model/protocol supports reading lamp hours.
+
+### Error And Warning Sensors
+
+The error sensor is diagnostic and reports ADCP error details or SDCP error status when the projector is operational. The warning sensor is diagnostic and available for ADCP projectors when the projector supports warning details.
 
 ## Services
 

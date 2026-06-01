@@ -175,6 +175,13 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self.async_set_updated_data(self._state)
         await self.async_request_refresh()
 
+    async def async_set_color_space(self, color_space: str) -> None:
+        """Set color space and update state optimistically."""
+        await self.config_entry.runtime_data.client.async_set_color_space(color_space)
+        self._state.color_space = color_space
+        self.async_set_updated_data(self._state)
+        await self.async_request_refresh()
+
     async def async_shutdown(self) -> None:
         """Cancel background work and close client resources."""
         await self.config_entry.runtime_data.client.close()
@@ -188,10 +195,16 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.input = state.input or self._state.input
         self._state.signal = state.signal or self._state.signal
         self._state.signal_supported = state.signal_supported
+        self._state.warning = state.warning
+        self._state.warning_supported = state.warning_supported
+        self._state.error = state.error
+        self._state.error_supported = state.error_supported
         self._state.picture_mode = state.picture_mode
         self._state.picture_mode_supported = state.picture_mode_supported
         self._state.calibration_preset = state.calibration_preset or self._state.calibration_preset
         self._state.calibration_preset_supported = state.calibration_preset_supported
+        self._state.color_space = state.color_space
+        self._state.color_space_supported = state.color_space_supported
         self._state.lamp_timer = state.lamp_timer
         self._state.lamp_timer_supported = state.lamp_timer_supported
         self._state.identity = state.identity or self._state.identity
@@ -208,8 +221,11 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.logical_power = None
         self._state.input = None
         self._state.signal = None
+        self._state.warning = None
+        self._state.error = None
         self._state.picture_mode = None
         self._state.calibration_preset = None
+        self._state.color_space = None
 
     def _apply_advertisement_timeout(self) -> None:
         advertisement = self._state.last_advertisement

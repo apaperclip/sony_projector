@@ -12,6 +12,7 @@ from custom_components.sony_projector.const import (
 )
 
 from .calibration_preset import SonyProjectorCalibrationPresetSelect
+from .color_space import SonyProjectorColorSpaceSelect
 from .picture_mode import SonyProjectorPictureModeSelect
 
 if TYPE_CHECKING:
@@ -32,4 +33,5 @@ async def async_setup_entry(
         entities.append(SonyProjectorPictureModeSelect(entry.runtime_data.coordinator))
     if protocol == PROTOCOL_SDCP:
         entities.append(SonyProjectorCalibrationPresetSelect(entry.runtime_data.coordinator))
+    entities.append(SonyProjectorColorSpaceSelect(entry.runtime_data.coordinator))
     async_add_entities(entities)

@@ -55,10 +55,16 @@ class SonyProjectorState:
     input: str | None = None
     signal: str | None = None
     signal_supported: bool = True
+    warning: str | None = None
+    warning_supported: bool = True
+    error: str | None = None
+    error_supported: bool = True
     picture_mode: str | None = None
     picture_mode_supported: bool = True
     calibration_preset: str | None = None
     calibration_preset_supported: bool = True
+    color_space: str | None = None
+    color_space_supported: bool = True
     lamp_timer: int | float | str | None = None
     lamp_timer_supported: bool = True
     identity: SonyProjectorIdentity | None = None

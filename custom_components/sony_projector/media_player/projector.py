@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from custom_components.sony_projector.const import DEFAULT_INPUT_SOURCES
 from custom_components.sony_projector.entity import SonyProjectorEntity
 from homeassistant.components.media_player import MediaPlayerEntity, MediaPlayerEntityDescription
 from homeassistant.components.media_player.const import MediaPlayerEntityFeature, MediaPlayerState
@@ -43,7 +42,7 @@ class SonyProjectorMediaPlayer(MediaPlayerEntity, SonyProjectorEntity):
     @property
     def source_list(self) -> list[str]:
         """Return available input sources."""
-        return self.coordinator.data.source_list or list(DEFAULT_INPUT_SOURCES)
+        return self.coordinator.data.source_list
 
     async def async_turn_on(self) -> None:
         """Turn the projector on."""

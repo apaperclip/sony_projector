@@ -9,6 +9,7 @@ from custom_components.sony_projector.const import (
     CONF_ADCP_PASSWORD,
     CONF_COMMUNITY,
     DEFAULT_CALIBRATION_PRESETS,
+    DEFAULT_COLOR_SPACES,
     DEFAULT_INPUT_SOURCES,
     DEFAULT_PICTURE_MODES,
     DEFAULT_SDCP_COMMUNITY,
@@ -197,7 +198,7 @@ class SonyProjectorApiClient:
             normalized_power_status=normalized_power_status,
             logical_power=is_logically_on(normalized_power_status),
             identity=current_identity,
-            source_list=list(DEFAULT_INPUT_SOURCES),
+            source_list=self.input_options(current_identity.model if current_identity else None),
         )
         try:
             state.lamp_timer = await self._call(self._lamp_timer_func(projector))
@@ -206,7 +207,13 @@ class SonyProjectorApiClient:
 
         if include_active and state.operational_available:
             state.input = await self._call(projector.get_input)
-            state.source_list = self._merge_sources(state.input)
+            state.source_list = self.input_options(current_identity.model if current_identity else None, state.input)
+            try:
+                state.color_space = self._normalize_value(await self._call(projector.get_color_space))
+            except SonyProjectorApiClientUnsupportedError:
+                state.color_space_supported = False
+            except SonyProjectorApiClientError:
+                state.color_space_supported = False
             if self.protocol == PROTOCOL_ADCP:
                 try:
                     state.signal = await self._call(projector.get_signal)
@@ -220,6 +227,18 @@ class SonyProjectorApiClient:
                     state.picture_mode_supported = False
                 except SonyProjectorApiClientError:
                     state.picture_mode_supported = False
+                try:
+                    state.warning = self._format_diagnostic_value(await self._call(projector.get_warning))
+                except SonyProjectorApiClientUnsupportedError:
+                    state.warning_supported = False
+                except SonyProjectorApiClientError:
+                    state.warning_supported = False
+                try:
+                    state.error = self._format_diagnostic_value(await self._call(projector.get_error))
+                except SonyProjectorApiClientUnsupportedError:
+                    state.error_supported = False
+                except SonyProjectorApiClientError:
+                    state.error_supported = False
             if self.protocol == PROTOCOL_SDCP:
                 try:
                     state.calibration_preset = await self._call(projector.get_calibration_preset)
@@ -227,6 +246,13 @@ class SonyProjectorApiClient:
                     state.calibration_preset_supported = False
                 except SonyProjectorApiClientError:
                     pass
+                try:
+                    state.error = self._format_diagnostic_value(await self._call(projector.get_error_status))
+                except SonyProjectorApiClientUnsupportedError:
+                    state.error_supported = False
+                except SonyProjectorApiClientError:
+                    state.error_supported = False
+                state.warning_supported = False
         return state
 
     async def async_set_power(self, power: bool) -> None:
@@ -248,6 +274,11 @@ class SonyProjectorApiClient:
         """Set the SDCP calibration preset."""
         async with self._connected_projector() as projector:
             await self._call(projector.set_calibration_preset, calibration_preset)
+
+    async def async_set_color_space(self, color_space: str) -> None:
+        """Set the color space."""
+        async with self._connected_projector() as projector:
+            await self._call(projector.set_color_space, color_space)
 
     async def close(self) -> None:
         """Close any persistent resources."""
@@ -286,11 +317,12 @@ class SonyProjectorApiClient:
                 raise
             raise mapped from exception
 
-    def _merge_sources(self, current_source: str | None) -> list[str]:
-        sources: list[str] = list(DEFAULT_INPUT_SOURCES)
-        if current_source and current_source not in sources:
-            sources.append(current_source)
-        return sources
+    def input_options(self, model: str | None = None, current_source: str | None = None) -> list[str]:
+        """Return input/source options for the configured protocol and model."""
+        feature = "FEATURE_ADCP_INPUT" if self.protocol == PROTOCOL_ADCP else "FEATURE_SDCP_INPUT"
+        fallback = "ADCP_INPUT_VALUES" if self.protocol == PROTOCOL_ADCP else "SDCP_INPUT_VALUES"
+        options = self._feature_options(model, feature, fallback, DEFAULT_INPUT_SOURCES)
+        return self._merge_options(options, self._normalize_value(current_source))
 
     def picture_mode_options(self, model: str | None = None, current_mode: str | None = None) -> list[str]:
         """Return ADCP picture mode options for a projector model."""
@@ -303,7 +335,22 @@ class SonyProjectorApiClient:
         current_preset: str | None = None,
     ) -> list[str]:
         """Return SDCP calibration preset options, preserving the current preset."""
-        return self._merge_options(self._sdcp_calibration_preset_options(model), current_preset)
+        return self._merge_options(
+            self._feature_options(
+                model,
+                "FEATURE_SDCP_CALIBRATION_PRESET",
+                "SDCP_CALIBRATION_PRESET_VALUES",
+                DEFAULT_CALIBRATION_PRESETS,
+            ),
+            current_preset,
+        )
+
+    def color_space_options(self, model: str | None = None, current_color_space: str | None = None) -> list[str]:
+        """Return color-space options for the configured protocol and model."""
+        feature = "FEATURE_ADCP_COLOR_SPACE" if self.protocol == PROTOCOL_ADCP else "FEATURE_SDCP_COLOR_SPACE"
+        fallback = "ADCP_COLOR_SPACE_VALUES" if self.protocol == PROTOCOL_ADCP else "SDCP_COLOR_SPACE_VALUES"
+        options = self._feature_options(model, feature, fallback, DEFAULT_COLOR_SPACES)
+        return self._merge_options(options, self._normalize_value(current_color_space))
 
     def _merge_options(self, defaults: tuple[str, ...], current_value: str | None) -> list[str]:
         options = list(defaults)
@@ -311,29 +358,42 @@ class SonyProjectorApiClient:
             options.append(current_value)
         return options
 
+    def _feature_options(
+        self,
+        model: str | None,
+        feature_name: str,
+        fallback_name: str,
+        fallback_options: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        protocol = _protocol_module()
+        get_feature_values = getattr(protocol, "get_feature_values", None)
+        feature = getattr(protocol, feature_name, None)
+        protocol_name = getattr(
+            protocol,
+            "PROTOCOL_ADCP" if self.protocol == PROTOCOL_ADCP else "PROTOCOL_SDCP",
+            self.protocol,
+        )
+        if get_feature_values is not None and feature is not None:
+            options = get_feature_values(model or "", feature, protocol=protocol_name)
+            if options is None:
+                return ()
+            return tuple(self._normalize_value(option) or option for option in options)
+
+        return tuple(
+            self._normalize_value(option) or option for option in getattr(protocol, fallback_name, fallback_options)
+        )
+
     def _adcp_picture_mode_options(self, model: str | None) -> tuple[str, ...]:
         protocol = _protocol_module()
         get_options = getattr(protocol, "get_adcp_picture_mode_options", None)
-        if model and get_options is not None:
-            model_options = get_options(model)
+        if get_options is not None:
+            model_options = get_options(model or "")
             if model_options is None:
                 return ()
             return tuple(self._normalize_picture_mode(option) or option for option in model_options)
 
         protocol_options = getattr(protocol, "ADCP_PICTURE_MODE_VALUES", DEFAULT_PICTURE_MODES)
         return tuple(self._normalize_picture_mode(option) or option for option in protocol_options)
-
-    def _sdcp_calibration_preset_options(self, model: str | None) -> tuple[str, ...]:
-        protocol = _protocol_module()
-        get_feature_values = getattr(protocol, "get_feature_values", None)
-        feature = getattr(protocol, "FEATURE_SDCP_CALIBRATION_PRESET", None)
-        protocol_name = getattr(protocol, "PROTOCOL_SDCP", PROTOCOL_SDCP)
-        if get_feature_values is not None and feature is not None:
-            options = get_feature_values(model or "", feature, protocol=protocol_name)
-            if options is not None:
-                return tuple(options)
-
-        return tuple(getattr(protocol, "SDCP_CALIBRATION_PRESET_VALUES", DEFAULT_CALIBRATION_PRESETS))
 
     def _normalize_picture_mode(self, value: str | None) -> str | None:
         if value is None:
@@ -349,6 +409,21 @@ class SonyProjectorApiClient:
             "cinema_film_2": "cinema_film2",
             "ref": "reference",
         }.get(normalized, normalized or None)
+
+    def _normalize_value(self, value: object | None) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip().strip('"').lower()
+        if "=" in normalized:
+            normalized = normalized.split("=", 1)[1].strip().strip('"')
+        normalized = normalized.replace("-", "_").replace(" ", "_")
+        return normalized or None
+
+    def _format_diagnostic_value(self, value: object) -> str | None:
+        if isinstance(value, list):
+            items = [str(item).strip() for item in value if str(item).strip()]
+            return ", ".join(items) if items else "none"
+        return self._string_or_none(value)
 
     def _string_or_none(self, value: object) -> str | None:
         if value is None:

@@ -57,6 +57,14 @@ DEFAULT_CALIBRATION_PRESETS = (
     "bright_tv",
     "user",
 )
+DEFAULT_COLOR_SPACES = (
+    "bt709",
+    "color_space1",
+    "color_space2",
+    "color_space3",
+    "custom",
+    "bt2020",
+)
 SENSITIVE_CONFIG_KEYS = {
     CONF_ADCP_PASSWORD,
     CONF_COMMUNITY,

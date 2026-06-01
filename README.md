@@ -13,19 +13,21 @@ Home Assistant custom integration for Sony projectors using the local SDCP/ADCP 
 - Local control, no cloud account required
 - UI setup with SDAP discovery or manual host entry
 - Media player entity for power and HDMI source selection
-- Protocol-specific picture mode or calibration preset select
+- Capability-backed HDMI/source selection
+- Protocol-specific picture mode, calibration preset, and color space selects
 - Power status sensor using protocol state names
 - ADCP signal diagnostic sensor
+- Projector error and warning diagnostic sensors
 - Lamp timer diagnostic sensor
 - SDAP advertisements for passive availability and power-state updates
 
 ## Platforms
 
-| Platform       | Description                                          |
-| -------------- | ---------------------------------------------------- |
-| `media_player` | Projector power control and source selection         |
-| `select`       | Picture mode for ADCP, calibration preset for SDCP   |
-| `sensor`       | Power status, IP address, and lamp timer diagnostics |
+| Platform       | Description                                                     |
+| -------------- | --------------------------------------------------------------- |
+| `media_player` | Projector power control and capability-backed source selection  |
+| `select`       | Picture mode for ADCP, calibration preset for SDCP, color space |
+| `sensor`       | Power status, IP address, error/warning, and lamp diagnostics   |
 
 ## Installation
 
@@ -69,12 +71,7 @@ The projector media player supports:
 - Turn off
 - Select source
 
-The default source list is:
-
-- `hdmi1`
-- `hdmi2`
-
-If the projector reports a different active source, the integration keeps that value in the source list.
+The source list comes from the model capability matrix in `sony_projector_protocol`. If the projector reports a different active source, the integration keeps that value in the source list.
 
 ### Power Status Sensor
 

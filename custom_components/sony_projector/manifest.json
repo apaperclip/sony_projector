@@ -12,5 +12,5 @@
   "requirements": [
     "sony-projector-protocol @ https://test-files.pythonhosted.org/packages/01/6f/a255933155c91a3bbf9b366b35dd34e8d8ae93e5522a63dceeff5b296866/sony_projector_protocol-0.3.1-py3-none-any.whl"
   ],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }
