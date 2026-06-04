@@ -51,6 +51,18 @@ class FakeProjector:
         """Return fake input."""
         return "hdmi2"
 
+    async def get_color_space(self) -> str:
+        """Return fake color space."""
+        return "bt709"
+
+    async def get_calibration_preset(self) -> str:
+        """Return fake calibration preset."""
+        return "ref"
+
+    async def get_error_status(self) -> str:
+        """Return fake error status."""
+        return "no_error"
+
     async def get_lamp_timer(self) -> int:
         """Return fake lamp timer."""
         if self.lamp_unsupported:
@@ -85,7 +97,8 @@ def fake_protocol_module(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_power_status_normalization() -> None:
     """Power helpers normalize advertisements and protocol strings."""
     assert normalize_power_status(0) == "standby"
-    assert normalize_power_status(1) == "on"
+    assert normalize_power_status(1) == "start_up"
+    assert normalize_power_status(3) == "on"
     assert normalize_power_status("Power On") == "on"
     assert is_operational_power_status("on") is True
     assert is_operational_power_status("cooling") is False
@@ -105,6 +118,9 @@ async def test_validate_and_active_data_reads_projector() -> None:
     assert state.device_available is True
     assert state.operational_available is True
     assert state.input == "hdmi2"
+    assert state.color_space == "bt709"
+    assert state.calibration_preset == "ref"
+    assert state.error == "no_error"
     assert state.lamp_timer == 123
     assert FakeProjector.instances[0].kwargs["host"] == "192.0.2.10"
     assert FakeProjector.instances[0].kwargs["protocol"] == "sdcp"
