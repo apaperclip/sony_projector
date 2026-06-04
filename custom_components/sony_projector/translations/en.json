@@ -26,9 +26,6 @@
           "community": "SDCP community"
         }
       },
-      "listen": {
-        "progress_action": "Searching for Sony projectors for up to 60 seconds"
-      },
       "discovered": {
         "description": "Choose a discovered Sony projector.",
         "data": {
@@ -90,6 +87,9 @@
     },
     "abort": {
       "already_configured": "This projector is already configured."
+    },
+    "progress": {
+      "discovering": "Searching for Sony projectors for up to 60 seconds"
     }
   },
   "options": {

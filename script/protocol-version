@@ -92,7 +92,7 @@ def update_requirements(version: str) -> None:
 
 def update_manifest(url: str) -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    requirement = f"{PACKAGE} @ {url}"
+    requirement = f"{PACKAGE}@{url}"
     requirements = manifest.setdefault("requirements", [])
     if not isinstance(requirements, list):
         fail("manifest.json requirements must be a list")
