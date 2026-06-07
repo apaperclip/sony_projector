@@ -175,7 +175,10 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             self._sdap_data = discovery_info
             unique_id = discovery_info["unique_id"]
             await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured(updates={CONF_HOST: discovery_info["host"]})
+            self._abort_if_unique_id_configured(
+                updates={CONF_HOST: discovery_info["host"]},
+                reload_on_update=False,
+            )
             self.context["title_placeholders"] = {
                 "name": discovery_info.get("product_name") or "Sony Projector",
             }
@@ -285,7 +288,10 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         unique_id = discovery_data["unique_id"]
         await self.async_set_unique_id(unique_id)
-        self._abort_if_unique_id_configured(updates={CONF_HOST: discovery_data["host"]})
+        self._abort_if_unique_id_configured(
+            updates={CONF_HOST: discovery_data["host"]},
+            reload_on_update=False,
+        )
         entry_input = {
             **user_input,
             CONF_HOST: discovery_data["host"],
@@ -382,7 +388,10 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         host = data[CONF_HOST]
         await self.async_set_unique_id(identity.unique_id)
-        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        self._abort_if_unique_id_configured(
+            updates={CONF_HOST: host},
+            reload_on_update=False,
+        )
         return self.async_create_entry(
             title=self._entry_title(identity, host),
             data=self._entry_data(data, identity.unique_id, setup_source=SETUP_SOURCE_MANUAL),
@@ -426,7 +435,7 @@ class SonyProjectorConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if entry.unique_id != identity.unique_id:
             return self._show_protocol_auth_form("reconfigure", data, errors={"base": "wrong_device"})
 
-        return self.async_update_reload_and_abort(
+        return self.async_update_and_abort(
             entry,
             data=self._entry_data(
                 data,
