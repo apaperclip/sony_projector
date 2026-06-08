@@ -35,23 +35,6 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/requirements*.txt"
 
-      - name: Get Home Assistant version
-        id: ha_version
-        run: |
-          HA_VERSION=$(grep '"homeassistant"' hacs.json | head -1 | sed 's/.*"homeassistant"\s*:\s*"\([^"]*\)".*/\1/')
-          echo "HA_VERSION=${HA_VERSION}" >> $GITHUB_OUTPUT
-          echo "Home Assistant version: ${HA_VERSION}"
-
-      - name: Cache Home Assistant installation
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: |
-            .local/ha-venv
-          key: ha-venv-${{ runner.os }}-py314-ha${{ steps.ha_version.outputs.HA_VERSION }}-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: |
-            ha-venv-${{ runner.os }}-py314-ha${{ steps.ha_version.outputs.HA_VERSION }}-
-            ha-venv-${{ runner.os }}-py314-
-
       - name: Install shfmt
         run: sudo apt-get install -y shfmt
 
