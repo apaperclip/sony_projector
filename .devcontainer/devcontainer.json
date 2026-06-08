@@ -11,12 +11,6 @@
   // Each hook script sources .devcontainer/hooks/<name>.{pre,post}.sh when present.
   //
   // Runs once at container creation — fixes Docker volume mount point ownership.
-  "runArgs": [
-    "--cap-add=SYS_ADMIN",
-    "--network=host",
-    "--security-opt=apparmor=unconfined",
-    "--security-opt=seccomp=unconfined"
-  ],
   "onCreateCommand": "bash .devcontainer/on-create.sh",
   // Runs at creation and on Codespaces pre-build refreshes — use for content-dependent setup.
   "updateContentCommand": "bash .devcontainer/update-content.sh",
@@ -25,6 +19,7 @@
   // Runs on every container creation — installs all dependencies.
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   // Runs on every client attach — detects fresh blueprints and triggers initialization.
+  "postAttachCommand": "bash .devcontainer/post-attach.sh",
   "containerEnv": {
     // Python runtime variables — must be set for ALL Python processes, including those spawned
     // by VS Code extensions (Pylance, test runner, Ruff) that never go through our shell scripts.
@@ -87,14 +82,10 @@
       ]
     }
   },
-  "forwardPorts": [8123, 8124],
+  "forwardPorts": [8123],
   "portsAttributes": {
     "8123": {
       "label": "Home Assistant",
-      "onAutoForward": "notify"
-    },
-    "8124": {
-      "label": "Home Assistant Dev",
       "onAutoForward": "notify"
     }
   },
@@ -105,16 +96,14 @@
         "davidanson.vscode-markdownlint",
         "EditorConfig.EditorConfig",
         "esbenp.prettier-vscode",
-        // "GitHub.copilot",
+        "GitHub.copilot",
         "github.vscode-pull-request-github",
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-vscode-remote.remote-containers",
         "ms-vscode.vscode-chat-customizations-evaluations",
         "redhat.vscode-yaml",
-        "tamasfe.even-better-toml",
-        "openai.codex",
-        "openai.chatgpt"
+        "tamasfe.even-better-toml"
       ],
       // Please keep this file in sync with settings in .vscode/settings.default.jsonc
       "settings": {

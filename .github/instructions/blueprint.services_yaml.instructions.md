@@ -105,12 +105,12 @@ turn_on:
 - Include realistic examples for complex fields
 - Use appropriate selectors for better UI
 - Mark fields as required only when necessary
-- Keep action names verb-based (e.g., `set_mode`, `refresh_status`)
+- Keep action names verb-based (e.g., `set_mode`, `reset_filter`)
 - Validate against schema before committing
 
 ## Related Files
 
-Service action implementations are in `custom_components/sony_projector/service_actions/`.
+Service action implementations are in `custom_components/ha_integration_domain/service_actions/`.
 
 ## Validation
 
