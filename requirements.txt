@@ -2,6 +2,6 @@
 # These are installed by Home Assistant when the integration is loaded
 # See custom_components/sony_projector/manifest.json for the authoritative list
 
---index-url https://test.pypi.org/simple/
+# --index-url https://test.pypi.org/simple/
 
-sony-projector-protocol==0.3.4
+sony-projector-protocol==0.3.5
