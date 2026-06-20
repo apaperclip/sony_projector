@@ -33,6 +33,8 @@ if TYPE_CHECKING:
     from custom_components.sony_projector.data import SonyProjectorConfigEntry
     from homeassistant.core import HomeAssistant
 
+SDAP_VISIBLE_POWER_STATES = {"start_up", "start_up_lamp", "on"}
+
 
 class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorState]):
     """Manage lifecycle-aware projector state for entities."""
@@ -117,19 +119,25 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         """Apply an SDAP advertisement and publish updated lifecycle state."""
         previous_mode = self._state.operational_available
         self._state.last_advertisement = advertisement
-        if self.config_entry.data.get(CONF_SETUP_SOURCE) == SETUP_SOURCE_MANUAL or not self._state.device_available:
+        if self.config_entry.data.get(CONF_SETUP_SOURCE) == SETUP_SOURCE_MANUAL:
             self.async_set_updated_data(self._state)
             return
 
         power_status = normalize_power_status(advertisement.power_status)
-        self._state.power_status = power_status
-        self._state.normalized_power_status = power_status
-        self._state.logical_power = is_logically_on(power_status)
-        self._state.operational_available = is_operational_power_status(power_status)
-        self._clear_pending_power_target_if_complete()
         if self._state.identity is not None:
             self._state.identity.model = self._state.identity.model or advertisement.product_name
             self._state.identity.location = self._state.identity.location or advertisement.location
+
+        if power_status not in SDAP_VISIBLE_POWER_STATES:
+            self.async_set_updated_data(self._state)
+            return
+
+        self._state.power_status = power_status
+        self._state.normalized_power_status = power_status
+        self._state.device_available = True
+        self._state.logical_power = is_logically_on(power_status)
+        self._state.operational_available = is_operational_power_status(power_status)
+        self._clear_pending_power_target_if_complete()
 
         if previous_mode != self._state.operational_available:
             LOGGER.info(
@@ -140,6 +148,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
 
         self.update_interval = self._poll_interval()
         self.async_set_updated_data(self._state)
+        self.async_request_refresh()
 
     async def async_set_power(self, power: bool) -> None:
         """Set logical power and temporarily use active polling."""
