@@ -148,7 +148,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
 
         self.update_interval = self._poll_interval()
         self.async_set_updated_data(self._state)
-        self.async_request_refresh()
+        self.hass.async_create_task(self.async_request_refresh())
 
     async def async_set_power(self, power: bool) -> None:
         """Set logical power and temporarily use active polling."""
@@ -158,7 +158,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.device_available = True
         if not power:
             self._state.operational_available = False
-        self.update_interval = timedelta(seconds=ACTIVE_POLL_INTERVAL_SECONDS)
+        self.update_interval = self._poll_interval()
         self.async_set_updated_data(self._state)
 
     async def async_set_input(self, source: str) -> None:
@@ -249,9 +249,7 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
 
     def _should_poll_active_data(self) -> bool:
         return (
-            self._state.operational_available
-            or self._state.logical_power is True
-            or self._pending_power_target is not None
+            self._state.operational_available or self._state.logical_power is True or self._pending_power_target is True
         )
 
     def _poll_interval(self) -> timedelta:

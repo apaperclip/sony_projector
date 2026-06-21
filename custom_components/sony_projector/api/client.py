@@ -92,6 +92,8 @@ def normalize_power_status(power_status: int | str | None) -> str | None:
         return "standby"
     if normalized in {"cooling", "cool_down", "cooldown"}:
         return "cooling"
+    if normalized in {"cooling1", "cooling_1"}:
+        return "cooling1"
     if normalized in {"cooling2", "cooling_2"}:
         return "cooling2"
     if normalized in {"warming", "warm_up", "startup", "start_up", "starting"}:
@@ -113,7 +115,7 @@ def is_logically_on(power_status: int | str | None) -> bool | None:
         return None
     if normalized in {"on", "start_up", "start_up_lamp"}:
         return True
-    if normalized in {"standby", "off", "cooling", "cooling2"}:
+    if normalized in {"standby", "off", "cooling", "cooling1", "cooling2", "saving_cooling1", "saving_cooling2"}:
         return False
     return None
 
@@ -200,10 +202,13 @@ class SonyProjectorApiClient:
             identity=current_identity,
             source_list=self.input_options(current_identity.model if current_identity else None),
         )
-        try:
-            state.lamp_timer = await self._call(self._lamp_timer_func(projector))
-        except SonyProjectorApiClientUnsupportedError:
-            state.lamp_timer_supported = False
+        if state.operational_available:
+            try:
+                state.lamp_timer = await self._call(self._lamp_timer_func(projector))
+            except SonyProjectorApiClientUnsupportedError:
+                state.lamp_timer_supported = False
+            except SonyProjectorApiClientError:
+                state.lamp_timer_supported = False
 
         if include_active and state.operational_available:
             state.input = await self._call(projector.get_input)
