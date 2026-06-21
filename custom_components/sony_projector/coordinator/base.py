@@ -34,6 +34,18 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 SDAP_VISIBLE_POWER_STATES = {"start_up", "start_up_lamp", "on"}
+ACTIVE_POLL_POWER_STATES = {
+    "start_up",
+    "start_up_lamp",
+    "on",
+    "cooling",
+    "cooling1",
+    "cooling2",
+    "saving_cooling1",
+    "saving_cooling2",
+    "saving_standby",
+    "update",
+}
 
 
 class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorState]):
@@ -201,24 +213,38 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.power_status = state.power_status
         self._state.normalized_power_status = state.normalized_power_status
         self._state.logical_power = is_logically_on(state.normalized_power_status)
-        self._state.input = state.input or self._state.input
-        self._state.signal = state.signal or self._state.signal
-        self._state.signal_supported = state.signal_supported
-        self._state.warning = state.warning
-        self._state.warning_supported = state.warning_supported
-        self._state.error = state.error
-        self._state.error_supported = state.error_supported
-        self._state.picture_mode = state.picture_mode
-        self._state.picture_mode_supported = state.picture_mode_supported
-        self._state.calibration_preset = state.calibration_preset or self._state.calibration_preset
-        self._state.calibration_preset_supported = state.calibration_preset_supported
-        self._state.color_space = state.color_space
-        self._state.color_space_supported = state.color_space_supported
-        self._state.lamp_timer = state.lamp_timer
-        self._state.lamp_timer_supported = state.lamp_timer_supported
+        self._state.input = state.input if state.input is not None else self._state.input
+        self._state.signal = state.signal if state.signal is not None else self._state.signal
+        self._state.signal_supported = self._merge_supported(self._state.signal_supported, state.signal_supported)
+        self._state.warning = state.warning if state.warning is not None else self._state.warning
+        self._state.warning_supported = self._merge_supported(self._state.warning_supported, state.warning_supported)
+        self._state.error = state.error if state.error is not None else self._state.error
+        self._state.error_supported = self._merge_supported(self._state.error_supported, state.error_supported)
+        self._state.picture_mode = state.picture_mode if state.picture_mode is not None else self._state.picture_mode
+        self._state.picture_mode_supported = self._merge_supported(
+            self._state.picture_mode_supported,
+            state.picture_mode_supported,
+        )
+        self._state.calibration_preset = (
+            state.calibration_preset if state.calibration_preset is not None else self._state.calibration_preset
+        )
+        self._state.calibration_preset_supported = self._merge_supported(
+            self._state.calibration_preset_supported,
+            state.calibration_preset_supported,
+        )
+        self._state.color_space = state.color_space if state.color_space is not None else self._state.color_space
+        self._state.color_space_supported = self._merge_supported(
+            self._state.color_space_supported,
+            state.color_space_supported,
+        )
+        self._state.lamp_timer = state.lamp_timer if state.lamp_timer is not None else self._state.lamp_timer
+        self._state.lamp_timer_supported = self._merge_supported(
+            self._state.lamp_timer_supported,
+            state.lamp_timer_supported,
+        )
         self._state.identity = state.identity or self._state.identity
         self._state.last_update_error = state.last_update_error
-        self._state.source_list = state.source_list or self._state.source_list
+        self._state.source_list = self._merge_source_lists(self._state.source_list, state.source_list)
         self._clear_pending_power_target_if_complete()
 
     def _mark_unavailable(self) -> None:
@@ -248,9 +274,10 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
         self._state.operational_available = False
 
     def _should_poll_active_data(self) -> bool:
-        return (
-            self._state.operational_available or self._state.logical_power is True or self._pending_power_target is True
-        )
+        if self._pending_power_target is True:
+            return True
+        power_status = normalize_power_status(self._state.normalized_power_status or self._state.power_status)
+        return power_status in ACTIVE_POLL_POWER_STATES
 
     def _poll_interval(self) -> timedelta:
         """Return the next coordinator polling interval."""
@@ -264,3 +291,15 @@ class SonyProjectorDataUpdateCoordinator(DataUpdateCoordinator[SonyProjectorStat
             self._pending_power_target = None
         if self._pending_power_target is False and self._state.normalized_power_status in {"standby", "off"}:
             self._pending_power_target = None
+
+    def _merge_source_lists(self, current_sources: list[str], incoming_sources: list[str]) -> list[str]:
+        """Merge source lists without dropping a source after an optional read failure."""
+        sources = list(current_sources)
+        for source in incoming_sources:
+            if source not in sources:
+                sources.append(source)
+        return sources
+
+    def _merge_supported(self, current_supported: bool, incoming_supported: bool) -> bool:
+        """Keep unsupported flags sticky while transient optional failures are ignored."""
+        return current_supported and incoming_supported

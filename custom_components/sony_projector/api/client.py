@@ -115,7 +115,16 @@ def is_logically_on(power_status: int | str | None) -> bool | None:
         return None
     if normalized in {"on", "start_up", "start_up_lamp"}:
         return True
-    if normalized in {"standby", "off", "cooling", "cooling1", "cooling2", "saving_cooling1", "saving_cooling2"}:
+    if normalized in {
+        "standby",
+        "off",
+        "cooling",
+        "cooling1",
+        "cooling2",
+        "saving_cooling1",
+        "saving_cooling2",
+        "saving_standby",
+    }:
         return False
     return None
 
@@ -208,17 +217,23 @@ class SonyProjectorApiClient:
             except SonyProjectorApiClientUnsupportedError:
                 state.lamp_timer_supported = False
             except SonyProjectorApiClientError:
-                state.lamp_timer_supported = False
+                pass
 
         if include_active and state.operational_available:
-            state.input = await self._call(projector.get_input)
-            state.source_list = self.input_options(current_identity.model if current_identity else None, state.input)
+            try:
+                state.input = await self._call(projector.get_input)
+            except SonyProjectorApiClientError:
+                pass
+            else:
+                state.source_list = self.input_options(
+                    current_identity.model if current_identity else None, state.input
+                )
             try:
                 state.color_space = self._normalize_value(await self._call(projector.get_color_space))
             except SonyProjectorApiClientUnsupportedError:
                 state.color_space_supported = False
             except SonyProjectorApiClientError:
-                state.color_space_supported = False
+                pass
             if self.protocol == PROTOCOL_ADCP:
                 try:
                     state.signal = await self._call(projector.get_signal)
@@ -231,19 +246,19 @@ class SonyProjectorApiClient:
                 except SonyProjectorApiClientUnsupportedError:
                     state.picture_mode_supported = False
                 except SonyProjectorApiClientError:
-                    state.picture_mode_supported = False
+                    pass
                 try:
                     state.warning = self._format_diagnostic_value(await self._call(projector.get_warning))
                 except SonyProjectorApiClientUnsupportedError:
                     state.warning_supported = False
                 except SonyProjectorApiClientError:
-                    state.warning_supported = False
+                    pass
                 try:
                     state.error = self._format_diagnostic_value(await self._call(projector.get_error))
                 except SonyProjectorApiClientUnsupportedError:
                     state.error_supported = False
                 except SonyProjectorApiClientError:
-                    state.error_supported = False
+                    pass
             if self.protocol == PROTOCOL_SDCP:
                 try:
                     state.calibration_preset = await self._call(projector.get_calibration_preset)
@@ -256,7 +271,7 @@ class SonyProjectorApiClient:
                 except SonyProjectorApiClientUnsupportedError:
                     state.error_supported = False
                 except SonyProjectorApiClientError:
-                    state.error_supported = False
+                    pass
                 state.warning_supported = False
         return state
 
