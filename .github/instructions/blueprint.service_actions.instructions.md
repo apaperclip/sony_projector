@@ -54,10 +54,10 @@ Both exceptions support translation keys for localization.
 Use modern `target` field in `services.yaml` instead of deprecated `entity_id`:
 
 ```yaml
-refresh_status:
+reset_filter:
   target:
     entity:
-      integration: sony_projector
+      domain: sensor
 ```
 
 ## Response Data
