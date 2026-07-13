@@ -57,11 +57,11 @@ Scope is optional but clarifies the affected component. Use the name of the affe
 ## Examples
 
 ```text
-feat(sensor): add projector temperature sensor
+feat(sensor): add temperature sensor for air purifier
 
-- Add SonyProjectorTemperatureSensor entity class
+- Add AirPurifierTemperatureSensor entity class
 - Register sensor in sensor/__init__.py platform setup
-- Add TEMPERATURE key to SonyProjectorSensorEntityDescription
+- Add TEMPERATURE key to AirPurifierSensorEntityDescription
 
 fix(coordinator): handle API timeout during initial refresh
 
