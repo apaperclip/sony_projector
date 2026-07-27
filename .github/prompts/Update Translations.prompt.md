@@ -69,13 +69,13 @@ If not provided, ask for:
 
    ```json
    "services": {
-     "refresh_status": {
-       "name": "Refresh Status",
-       "description": "Refresh projector status",
+     "reset_filter": {
+       "name": "Reset Filter",
+       "description": "Reset the filter counter",
        "fields": {
          "entity_id": {
            "name": "Entity",
-           "description": "Entity to refresh"
+           "description": "Entity to reset"
          }
        }
      }
@@ -121,8 +121,8 @@ If not provided, ask for:
 
 **Related Files:**
 
-- English: [#file:custom_components/sony_projector/translations/en.json]
-- German: [#file:custom_components/sony_projector/translations/de.json]
+- English: [#file:custom_components/{domain}/translations/en.json]
+- German: [#file:custom_components/{domain}/translations/de.json]
 - Schema: [#file:schemas/json/translation_schema.json]
 - Documentation: Reference [#file:.github/instructions/translations.instructions.md]
 
