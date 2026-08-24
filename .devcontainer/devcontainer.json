@@ -11,12 +11,6 @@
   // Each hook script sources .devcontainer/hooks/<name>.{pre,post}.sh when present.
   //
   // Runs once at container creation — fixes Docker volume mount point ownership.
-  "runArgs": [
-    "--cap-add=SYS_ADMIN",
-    "--network=host",
-    "--security-opt=apparmor=unconfined",
-    "--security-opt=seccomp=unconfined"
-  ],
   "onCreateCommand": "bash .devcontainer/on-create.sh",
   // Runs at creation and on Codespaces pre-build refreshes — use for content-dependent setup.
   "updateContentCommand": "bash .devcontainer/update-content.sh",
@@ -25,6 +19,7 @@
   // Runs on every container creation — installs all dependencies.
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   // Runs on every client attach — detects fresh blueprints and triggers initialization.
+  "postAttachCommand": "bash .devcontainer/post-attach.sh",
   "containerEnv": {
     // Python runtime variables — must be set for ALL Python processes, including those spawned
     // by VS Code extensions (Pylance, test runner, Ruff) that never go through our shell scripts.
@@ -53,6 +48,10 @@
       "version": "lts"
     },
     "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+    "ghcr.io/dirien/devcontainer-feature-codex/codex:0": {
+      "version": "latest"
+    },
     "ghcr.io/devcontainer-community/devcontainer-features/yq:1": {
       "version": "latest"
     },
@@ -66,11 +65,13 @@
         "ffmpeg",
         "fzf",
         "git-delta",
+        "gron",
         "httpie",
         "hyperfine",
         "ipython3",
         "jo",
         "jq",
+        "just",
         "libpcap-dev",
         "libssl-dev",
         "libtool",
@@ -81,20 +82,17 @@
         "ripgrep",
         "shellcheck",
         "shfmt",
+        "socat",
         "sqlite3",
         "tree",
         "yamllint"
       ]
     }
   },
-  "forwardPorts": [8123, 8124],
+  "forwardPorts": [8123],
   "portsAttributes": {
     "8123": {
       "label": "Home Assistant",
-      "onAutoForward": "notify"
-    },
-    "8124": {
-      "label": "Home Assistant Dev",
       "onAutoForward": "notify"
     }
   },
@@ -105,20 +103,22 @@
         "davidanson.vscode-markdownlint",
         "EditorConfig.EditorConfig",
         "esbenp.prettier-vscode",
-        // "GitHub.copilot",
+        "GitHub.copilot",
         "github.vscode-pull-request-github",
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-vscode-remote.remote-containers",
         "ms-vscode.vscode-chat-customizations-evaluations",
         "redhat.vscode-yaml",
-        "tamasfe.even-better-toml",
-        "openai.codex",
-        "openai.chatgpt"
+        "tamasfe.even-better-toml"
       ],
       // Please keep this file in sync with settings in .vscode/settings.default.jsonc
       "settings": {
         "chat.promptFiles": true,
+        // AGENTS.md is the single always-loaded instruction file; there is no
+        // .github/copilot-instructions.md to fall back on, so pin this on.
+        "chat.useAgentsMdFile": true,
+        // No chat.agentSkillsLocations needed: VS Code discovers .agents/skills/ by default.
         "editor.tabSize": 4,
         "editor.formatOnPaste": false,
         "editor.formatOnSave": true,
@@ -140,6 +140,8 @@
         "python.terminal.activateEnvInCurrentTerminal": true,
         // .devcontainer/.env uses Bash syntax (sourced by setup scripts) — not a Python dotenv file.
         // Disable VS Code's env file injection to avoid parse errors and unexpected variable leakage.
+        // Also clear python.envFile to avoid Python extension warnings about a configured env file.
+        "python.envFile": "",
         "python.terminal.useEnvFile": false,
         "python.testing.pytestArgs": ["--no-cov"],
         "terminal.integrated.profiles.linux": {
@@ -148,6 +150,27 @@
           }
         },
         "terminal.integrated.defaultProfile.linux": "zsh",
+        // Devcontainer already isolates execution; disable agent terminal sandbox to
+        // avoid double-sandbox namespace/prerequisite issues in chat tooling.
+        "chat.agent.sandbox.enabled": "off",
+        // Keep explicit compatibility with terminal-tool specific setting variants.
+        "chat.tools.terminal.sandbox.enabled": false,
+        // Disallow global auto-approval; use workspace/session scoped approvals instead.
+        "chat.tools.global.autoApprove": false,
+        // Always require manual approval for sensitive paths, even when broader auto-approve is enabled.
+        "chat.tools.edits.autoApprove": {
+          "**/.env": false,
+          "**/.env.*": false,
+          "**/.git/**": false,
+          ".agents/hooks/**": false,
+          ".claude/settings.json": false,
+          ".codex/hooks.json": false,
+          ".github/workflows/**": false,
+          ".github/actions/**": false,
+          "release-please-config.json": false,
+          "script/release-notes": false,
+          "script/version": false
+        },
         "yaml.customTags": [
           "!secret scalar",
           "!include scalar",
@@ -181,7 +204,7 @@
           "editor.formatOnSave": false
         },
         "github.copilot.chat.commitMessageGeneration.instructions": [
-          { "file": ".github/instructions/blueprint.commit-message.instructions.md" }
+          { "file": ".agents/instructions/blueprint.commit-message.instructions.md" }
         ],
         "json.schemas": [
           {
@@ -221,6 +244,12 @@
     // Named volume for node_modules: keeps it on Container FS (not bind mount) for performance.
     // Docker manages this volume separately from the workspace — npm ci runs fast on overlay FS.
     "source=${localWorkspaceFolderBasename}_node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
+    // Persist Claude CLI home data (sessions/history/auth) across container rebuilds.
+    // Useful when using Claude Code locally inside the DevContainer.
+    "source=${localWorkspaceFolderBasename}_claude_home,target=/home/vscode/.claude,type=volume",
+    // Persist Codex CLI data (sessions/history/config) across container rebuilds.
+    // Config bootstrap in on-create continues to work because this directory stays writable.
+    "source=${localWorkspaceFolderBasename}_codex_home,target=/home/vscode/.codex,type=volume",
     // Mount host gitconfig for local development (ignored in Codespaces)
     // In Codespaces, GitHub automatically configures Git with your account
     "source=${localEnv:HOME}${localEnv:USERPROFILE}/.gitconfig,target=/home/vscode/.gitconfig.host,type=bind,consistency=cached,readonly"
